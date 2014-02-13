@@ -13,10 +13,14 @@
 =========================================================================*/
 
 #include "vtkActor.h"
+#include "vtkProperty.h"
+#include "vtkLightCollection.h"
+#include "vtkLight.h"
 #include "vtkCamera.h"
 #include "vtkCMLMoleculeReader.h"
 #include "vtkMolecule.h"
 #include "vtkMoleculeMapper2.h"
+#include "vtkMoleculeToBondStickFilter.h"
 #include "vtkNew.h"
 #include "vtkRenderWindowInteractor.h"
 #include "vtkRenderWindow.h"
@@ -29,6 +33,8 @@
 #include "vtkPointData.h"
 #include "vtkDoubleArray.h"
 #include "vtkStructuredGrid.h"
+#include "vtkWindowToImageFilter.h"
+#include "vtkPNGWriter.h"
 
 #include <string>
 #include <fstream>
@@ -450,13 +456,13 @@ int ReadXSFGrid(ifstream &file, vtkStructuredGrid *sgrid)
   unsigned long q = 0;
   for (unsigned long k=0; k<nx[2]; ++k)
     {
-    unsigned long t = (k+gnx[2])%nx[2];
+    unsigned long t = (k+gnx[2])%(nx[2]-1);
     for (unsigned long j=0; j<nx[1]; ++j)
       {
-      unsigned long s =(j+gnx[1])%nx[1];
+      unsigned long s =(j+gnx[1])%(nx[1]-1);
       for (unsigned long i=0; i<nx[0]; ++i,++q)
         {
-        unsigned long r =(i+gnx[0])%nx[0];
+        unsigned long r =(i+gnx[0])%(nx[0]-1);
         file >> arrayData[r + s*nx[0] + t*nx[3]];
         if (!file.good())
           {
@@ -552,11 +558,30 @@ public:
   static KeyPressInteractorStyle* New();
   vtkTypeMacro(KeyPressInteractorStyle, vtkInteractorStyleTrackballCamera);
 
-  KeyPressInteractorStyle() : Mapper(NULL), POVFile(NULL) {}
+  KeyPressInteractorStyle() :
+    Molecule(NULL),
+    Grid(NULL),
+    Mapper(NULL),
+    Renderer(NULL),
+    RenderWindow(NULL),
+    POVFile(NULL)
+  {}
 
+  ~KeyPressInteractorStyle()
+    {
+    this->SetMolecule(NULL);
+    this->SetGrid(NULL);
+    this->SetMapper(NULL);
+    this->SetRenderer(NULL);
+    this->SetRenderWindow(NULL);
+    }
   // Description:
-  // Set the mapper
+  // Set the objects
+  vtkSetObjectMacro(Molecule, vtkMolecule);
+  vtkSetObjectMacro(Grid, vtkStructuredGrid);
   vtkSetObjectMacro(Mapper, vtkMoleculeMapper2);
+  vtkSetObjectMacro(Renderer, vtkRenderer);
+  vtkSetObjectMacro(RenderWindow, vtkRenderWindow);
 
   // Description:
   // Set the output file name
@@ -570,52 +595,25 @@ public:
     vtkRenderWindowInteractor *rwi = this->Interactor;
     std::string key = rwi->GetKeySym();
 
-    if (key == "w")
+    if (key == "W")
       {
-      cerr << "wrote " << this->POVFile << endl;
       ofstream povf(this->POVFile);
       povf << this->Mapper->GetPOVRayStream() << endl;
-      }
-    else
-    if (key == "a")
-      {
-      double r = this->Mapper->GetAtomicRadiusScaleFactor();
-      cerr << "Enter atom radius scale factor (" << r << ") :";
-      cin >> r;
-      this->Mapper->SetAtomicRadiusScaleFactor(r);
-      this->Mapper->Update();
-      }
-    else
-    if (key == "b")
-      {
-      double t = this->Mapper->GetBondRadius();
-      cerr << "Enter bond radius (" << t << ") :";
-      cin >> t;
-      this->Mapper->SetBondRadius(t);
-      this->Mapper->Update();
-      }
-    else
-    if (key == "s")
-      {
-      this->Mapper->SetBondColorModeToSingleColor();
-      cerr << "set bonds to single color" << endl;
-      }
-    else
-    if (key == "d")
-      {
-      this->Mapper->SetBondColorModeToDiscreteByAtom();
-      cerr << "set bonds to discrete color" << endl;
-      }
-    else
-    if (key == "p")
-      {
-      vtkPolyData *bonds = this->Mapper->GetBonds();
+      cerr << "wrote " << this->POVFile << endl;
+
+      vtkMoleculeToBondStickFilter *bf = vtkMoleculeToBondStickFilter::New();
+      bf->SetInputData(this->Molecule);
+
+
+      //vtkPolyData *bonds = this->Mapper->GetBonds();
       vtkPolyDataWriter *w = vtkPolyDataWriter::New();
-      w->SetInputData(bonds);
+      //w->SetInputData(bonds);
+      w->SetInputConnection(bf->GetOutputPort());
       w->SetFileName("bonds.vtk");
       w->Write();
       w->Delete();
-      bonds->Delete();
+      //bonds->Delete();
+      bf->Delete();
       cerr << "wrote bonds to bonds.vtk" << endl;
 
       vtkPolyData *atoms = this->Mapper->GetAtoms();
@@ -627,26 +625,102 @@ public:
       w->Delete();
       atoms->Delete();
       cerr << "wrote atoms to atoms.vtk" << endl;
+
+      vtkDataSetWriter *sw = vtkDataSetWriter::New();
+      sw->SetInputData(this->Grid);
+      sw->SetFileName("grid.vtk");
+      sw->Write();
+      sw->Delete();
+      cerr << "wrote grid.vtk" << endl;
+
+      return;
+      }
+    else
+    if (key == "A")
+      {
+      double r = this->Mapper->GetAtomicRadiusScaleFactor();
+      cerr << "Enter atom radius scale factor (" << r << ") :";
+      cin >> r;
+      this->Mapper->SetAtomicRadiusScaleFactor(r);
+      this->Mapper->Update();
+      return;
+      }
+    else
+    if (key == "B")
+      {
+      double t = this->Mapper->GetBondRadius();
+      cerr << "Enter bond radius (" << t << ") :";
+      cin >> t;
+      this->Mapper->SetBondRadius(t);
+      this->Mapper->Update();
+      return;
+      }
+    else
+    if (key == "S")
+      {
+      this->Mapper->SetBondColorModeToSingleColor();
+      cerr << "set bonds to single color" << endl;
+      return;
+      }
+    else
+    if (key == "D")
+      {
+      this->Mapper->SetBondColorModeToDiscreteByAtom();
+      cerr << "set bonds to discrete color" << endl;
+      return;
+      }
+    else
+    if (key == "I")
+      {
+      string file;
+      cerr << "Enter file name :";
+      cin >> file;
+      vtkWindowToImageFilter *i=vtkWindowToImageFilter::New();
+      i->SetInput(this->RenderWindow);
+      vtkPNGWriter *w=vtkPNGWriter::New();
+      w->SetFileName(file.c_str());
+      w->SetInputConnection(i->GetOutputPort());
+      w->Write();
+      w->Delete();
+      i->Delete();
+      }
+    else
+    if (key == "L")
+      {
+      cerr << "Enter light intensity :" << endl;
+      double i = 1.0;
+      cin >> i;
+      vtkLightCollection *lc = this->Renderer->GetLights();
+      lc->InitTraversal();
+      vtkLight *l;
+      while (l = lc->GetNextItem())
+        {
+        l->SetIntensity(i);
+        }
       }
     else
     if (key == "h")
       {
       cerr << "help:" << endl
-        << "w - write POV file" << endl
-        << "b - enter bond radius" << endl
-        << "a - enter atom radius scale factor" << endl
-        << "s - single color for bonds" << endl
-        << "d - discrete color for bonds" << endl
-        << "p - write poly data" << endl
+        << "W - write POV file" << endl
+        << "B - enter bond radius" << endl
+        << "A - enter atom radius scale factor" << endl
+        << "S - single color for bonds" << endl
+        << "D - discrete color for bonds" << endl
         << endl;
+      return;
       }
 
-    // Forward events
+    // Forward other events
     vtkInteractorStyleTrackballCamera::OnKeyPress();
     }
 
 private:
+  vtkMolecule *Molecule;
+  vtkStructuredGrid *Grid;
   vtkMoleculeMapper2 *Mapper;
+  vtkRenderer *Renderer;
+  vtkRenderWindow *RenderWindow;
   char *POVFile;
 
 };
@@ -698,13 +772,6 @@ int main(int argc, char *argv[])
     return -1;
     }
   cerr << "read " << input << endl;
-  vtkDataSetWriter *w = vtkDataSetWriter::New();
-  w->SetInputData(grid);
-  w->SetFileName("grid.vtk");
-  w->Write();
-  w->Delete();
-  grid->Delete();
-  cerr << "wrote grid.vtk" << endl;
 
   /* while looking for interesting molecules ...
   if (cmlSource->GetOutput()->GetNumberOfAtoms() < 30)
@@ -722,17 +789,28 @@ int main(int argc, char *argv[])
   molmapper->SetPOVRayStreaming(true);
 
   vtkNew<vtkActor> actor;
+  actor->GetProperty()->SetAmbient(0.1);
+  actor->GetProperty()->SetSpecular(0.5);
+  actor->GetProperty()->SetDiffuse(0.2);
   actor->SetMapper(molmapper.GetPointer());
 
   vtkNew<vtkRenderer> ren;
+  ren->SetBackground2(0.08,0.08,0.08);
+  ren->SetBackground2(0.87,0.87,0.87);
+  ren->GradientBackgroundOn();
   vtkNew<vtkRenderWindow> win;
   win->AddRenderer(ren.GetPointer());
   vtkNew<vtkRenderWindowInteractor> iren;
   iren->SetRenderWindow(win.GetPointer());
 
   vtkNew<KeyPressInteractorStyle> style;
+  style->SetMolecule(molecule);
+  style->SetGrid(grid);
   style->SetMapper(molmapper.GetPointer());
   style->SetPOVFile(output.c_str());
+  style->SetRenderer(ren.GetPointer());
+  style->SetRenderWindow(win.GetPointer());
+  grid->Delete();
 
   iren->SetInteractorStyle(style.GetPointer());
   style->SetCurrentRenderer(ren.GetPointer());

@@ -26,8 +26,8 @@ ostream &operator<<(ostream &os, POVRayFinish &f)
     << " diffuse " << f.Diffuse << endl
     << " specular " << f.Specular << endl
     << " roughness " << f.Roughness << endl
-    << " phong " << f.Phong << endl
-    << " phong_size " << f.PhongSize << endl
+    << "// phong " << f.Phong << endl
+    << "// phong_size " << f.PhongSize << endl
     << " reflection ";
   if (f.Metal)
     {
@@ -46,7 +46,7 @@ ostream &operator<<(ostream &os, POVRayCylinder &c)
 {
   os
     << "cylinder { "
-    << c.Point1 << ", " << c.Point2 << ", " << c.Radius << endl
+    << c.Point1 << ", " << c.Point2 << ", CylinderScaling*" << c.Radius << endl
     << "pigment { " << c.Color.Name << "}" << endl
     << "finish { " << c.Finish.Name << "}" << endl
     << "}";
@@ -58,7 +58,7 @@ ostream &operator<<(ostream &os, POVRaySphere &s)
 {
   os
     << "sphere { "
-    << s.Center << ", " << s.Radius << endl
+    << s.Center << ", SphereScaling*" << s.Radius << endl
     << "pigment { " << s.Color.Name << "}" << endl
     << "finish { " << s.Finish.Name << "}" << endl
     << "}";
