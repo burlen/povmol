@@ -68,10 +68,10 @@ vtkMoleculeMapper2::vtkMoleculeMapper2()
     BondColorMode(DiscreteByAtom),
     UseMultiCylindersForBonds(true),
     BondRadius(0.075),
-    POVRayStreaming(false),
+    UniformBondColor("BondColor", 1.0f),
     AtomFinish(),
     BondFinish(),
-    UniformBondColor("BondColor", 1.0f)
+    POVRayStreaming(false)
 {
   // Initialize ivars:
   this->BondColor[0] = this->BondColor[1] = this->BondColor[2] = 50;
@@ -398,7 +398,6 @@ void vtkMoleculeMapper2::WriteColorDefs(ostream &os)
   // atom based colors
   vtkMolecule *molecule = this->GetInput();
   const vtkIdType numAtoms = molecule->GetNumberOfAtoms();
-  vtkPoints *atomCenters = molecule->GetAtomicPositionArray();
   vtkUnsignedShortArray *atomicNums = molecule->GetAtomicNumberArray();
 
   vtkLookupTable *lut
@@ -429,9 +428,6 @@ void vtkMoleculeMapper2::WriteBonds(ostream &os)
 
   vtkMolecule *molecule = this->GetInput();
   const vtkIdType numBonds = molecule->GetNumberOfBonds();
-
-  vtkLookupTable *lut
-    = dynamic_cast<vtkLookupTable*>(this->AtomGlyphMapper->GetLookupTable());
 
   // Generate the scale, orientation, and position of each cylinder
   for (vtkIdType bondInd = 0; bondInd<numBonds; ++bondInd)
