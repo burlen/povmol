@@ -8,12 +8,12 @@ namespace AtomicProperties
 {
 
 enum {
-    ATOMIC,
-    IONIC,
-    COVALENT,
-    VANDERWAALS,
-    CRYSTAL
-    };
+  ATOMIC,
+  IONIC,
+  COVALENT,
+  VANDERWAALS,
+  CRYSTAL
+  };
 
 /**
 Compute a radius of interaction that could be
@@ -36,6 +36,8 @@ Given an atomic number get its symbol in the
 periodic table
 */
 EXPORT std::string Symbol(unsigned short number);
+
+EXPORT inline unsigned short MaxNumber(){ return 96; }
 
 };
 

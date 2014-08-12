@@ -2,6 +2,7 @@
 #include "Math3D.h"
 #include "Geometry.h"
 #include "AtomicProperties.h"
+#include "AtomicPropertiesBondDetector.h"
 
 #include <vtkMolecule.h>
 #include <vtkStructuredGrid.h>
@@ -304,7 +305,11 @@ int Read(const string &fileName, vtkMolecule *molecule, vtkStructuredGrid *sgrid
     }
 
   // construct molecule
-  BuildMolecule(molecule,ax,an,AtomicProperties::ATOMIC, 1.05);
+  AtomicPropertiesBondDetector *detector = new AtomicPropertiesBondDetector;
+  detector->SetDetectionMode(AtomicProperties::ATOMIC);
+  detector->SetTolerance(1.05);
+  BuildMolecule(molecule, ax, an, detector);
+  delete detector;
 
   if (ReadXSFGrid(file, sgrid))
     {

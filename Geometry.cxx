@@ -2,6 +2,7 @@
 #include "Utility.h"
 #include "AtomicProperties.h"
 #include "Math3D.h"
+#include "BondDetector.h"
 
 #include <vtkMolecule.h>
 #include <vtkPolyData.h>
@@ -84,8 +85,7 @@ void BuildMolecule(
     vtkMolecule *molecule,
     vector<double> &positions,
     vector<unsigned short> &numbers,
-    int detectionMode,
-    double proximityFactor)
+    const BondDetector *detector)
 {
   molecule->Initialize();
   // atoms
@@ -106,11 +106,7 @@ void BuildMolecule(
       {
       if (!numbers[j]) continue;
       unsigned int jj = 3*j;
-      double r[3];
-      Math3D::sub(r, &positions[jj], &positions[ii]);
-      if ( Math3D::length(r)
-        < proximityFactor*( AtomicProperties::Radius(numbers[i], detectionMode)
-                + AtomicProperties::Radius(numbers[j], detectionMode) ) )
+      if (detector->Connected(numbers[i], &positions[ii], numbers[j], &positions[jj]))
         {
         bonds.push_back(j);
         }

@@ -6,13 +6,13 @@
 
 class vtkPolyData;
 class vtkMolecule;
+class BondDetector;
 
 EXPORT void BuildMolecule(
     vtkMolecule *molecule,
     std::vector<double> &positions,
     std::vector<unsigned short> &numbers,
-    int detectionMode,
-    double proximityFactor);
+    const BondDetector *detector);
 
 EXPORT void BuildAxes(
     vtkPolyData *data,

@@ -140,6 +140,7 @@ double Radius(unsigned short number, int mode)
       break;
     case CRYSTAL:
       col = 4;
+      break;
     default:
       pError(cerr) << "Bad mode " << mode << endl;
       return -1.0;

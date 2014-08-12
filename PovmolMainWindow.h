@@ -3,10 +3,14 @@
 
 #include <QMainWindow>
 #include "ui_PovmolMainWindowUi.h"
+#include <memory>
 
 class vtkRenderer;
 class vtkCIFMoleculeReader;
 class vtkMoleculeMapper2;
+class BondDetector;
+class TableBasedBondDetector;
+class AtomicPropertiesBondDetector;
 
 class PovmolMainWindow : public QMainWindow
 {
@@ -17,7 +21,8 @@ public:
   ~PovmolMainWindow();
 
 protected:
-  //virtual void closeEvent(QCloseEvent *event);
+  // detection modes
+  enum {ATOMIC, IONIC, COVALENT, VANDERWAALS, CRYSTAL, TABLE};
 
 private slots:
   void UpdateBondDetectionMode(int);
@@ -25,6 +30,8 @@ private slots:
   void UpdateBondRadius();
   void UpdateBondProximityFactor();
   void UpdateBondColorMode();
+  void UpdateActiveTransforms();
+  void UpdateDuplicates();
   void OpenFile();
   void WritePOV();
   void WriteVTK();
@@ -34,20 +41,21 @@ private slots:
   void BuildPipeline();
   void UpdateLightIntensity();
   void ShowTransforms();
-  void UpdateActiveTransforms();
   void ViewDownX();
   void ViewDownY();
   void ViewDownZ();
   void ViewUpX();
   void ViewUpY();
   void ViewUpZ();
-
+  void EditBondTable();
 
 private:
   Ui_PovmolMainWindowUi *Ui;
   vtkRenderer *Renderer;
   vtkCIFMoleculeReader *Reader;
   vtkMoleculeMapper2 *MoleculeMapper;
+  std::shared_ptr<TableBasedBondDetector> TableDetector;
+  std::shared_ptr<AtomicPropertiesBondDetector> PropertiesDetector;
 };
 
 #endif

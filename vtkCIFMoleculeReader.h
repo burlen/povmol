@@ -23,9 +23,11 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 class vtkMolecule;
 class vtkPolyData;
+class BondDetector;
 
 class VTKDOMAINSCHEMISTRY_EXPORT vtkCIFMoleculeReader : public vtkMoleculeAlgorithm
 {
@@ -45,27 +47,47 @@ public:
   const char *GetFileName(){ return this->FileName.c_str(); }
 
   // Description:
-  // Set/Get mode by which bonds are detected
-  enum {
-    ATOMIC,
-    IONIC,
-    COVALENT,
-    VANDERWAALS,
-    CRYSTAL
-    };
-  vtkSetMacro(BondDetectionMode, int);
-  vtkGetMacro(BondDetectionMode, int);
+  // Set/Get the bond detector
+  void SetBondDetector(const std::shared_ptr<BondDetector> &detector);
+  void BondDetectorModified();
 
-  vtkSetMacro(BondProximityFactor, double);
-  vtkGetMacro(BondProximityFactor, double);
-
+  // Description:
+  // return true when a file has been successfully opened
+  // and get'ers return valid results.
   vtkGetMacro(Initialized, int);
 
+  // Description:
+  // Return the number of symmetry transforms in the file
   size_t GetNumberOfTransforms(){ return this->Transforms.size(); }
+
+  // Description:
+  // Get the i'th symmetry transform's label
   const char *GetTransformLabel(size_t i){ return this->TransformLabels[i].c_str(); }
+
+  // Description:
+  // Activate/Deactive the i'th symmetry transform
   void ActivateTransform(size_t i);
   void DeactivateTransform(size_t i);
+
+  // Description:
+  // Deactivate all symmetry transforms.
   void DeacivateTransforms();
+
+  // Description:
+  // Set the number of duplicate in primitive vector
+  // directions
+  vtkSetMacro(DuplicateAPlus, unsigned int);
+  vtkSetMacro(DuplicateBPlus, unsigned int);
+  vtkSetMacro(DuplicateCPlus, unsigned int);
+  vtkSetMacro(DuplicateAMinus, unsigned int);
+  vtkSetMacro(DuplicateBMinus, unsigned int);
+  vtkSetMacro(DuplicateCMinus, unsigned int);
+  vtkGetMacro(DuplicateAPlus, unsigned int);
+  vtkGetMacro(DuplicateBPlus, unsigned int);
+  vtkGetMacro(DuplicateCPlus, unsigned int);
+  vtkGetMacro(DuplicateAMinus, unsigned int);
+  vtkGetMacro(DuplicateBMinus, unsigned int);
+  vtkGetMacro(DuplicateCMinus, unsigned int);
 
 protected:
   vtkCIFMoleculeReader();
@@ -92,8 +114,14 @@ private:
   std::vector<double> Positions;
   std::vector<unsigned short> Types;
 
-  int BondDetectionMode;
-  double BondProximityFactor;
+  std::shared_ptr<BondDetector> Detector;
+
+  unsigned int DuplicateAPlus;
+  unsigned int DuplicateBPlus;
+  unsigned int DuplicateCPlus;
+  unsigned int DuplicateAMinus;
+  unsigned int DuplicateBMinus;
+  unsigned int DuplicateCMinus;
 
 private:
   vtkCIFMoleculeReader(const vtkCIFMoleculeReader&);  // Not implemented.

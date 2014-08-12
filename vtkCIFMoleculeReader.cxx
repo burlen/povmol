@@ -48,6 +48,7 @@ using std::setw;
 using std::ifstream;
 using std::numeric_limits;
 using std::back_inserter;
+using std::shared_ptr;
 
 #define vtkCIFMoleculeReaderDEBUG
 
@@ -157,7 +158,7 @@ int ParsePositions(istream &file, vector<double> &positions)
 bool Exists(double *pt, const vector<double> &pts, double tol)
 {
   //return false;
-  size_t n = pts.size();
+  size_t n = pts.size()/3;
   for (size_t i=0; i<n; ++i)
     {
     size_t ii=3*i;
@@ -301,6 +302,34 @@ void ApplyPeriodicBC(double *pt)
 }
 
 // **************************************************************************
+void ApplyPeriodicBC(vector<double> &points, vector<unsigned short> &numbers)
+{
+  vector<double> newPoints;
+  vector<unsigned short> newNumbers;
+
+  size_t nPoints = numbers.size();
+  for (size_t i=0; i<nPoints; ++i)
+    {
+    size_t ii = 3*i;
+    double *pt = &points[ii];
+
+    ApplyPeriodicBC(pt);
+
+    if (!Exists(pt, newPoints, 1e-5))
+      {
+      newPoints.push_back(pt[0]);
+      newPoints.push_back(pt[1]);
+      newPoints.push_back(pt[2]);
+
+      newNumbers.push_back(numbers[i]);
+      }
+    }
+
+  points.swap(newPoints);
+  numbers.swap(newNumbers);
+}
+
+// **************************************************************************
 void ApplyTransform(
       vector<double> &points,
       vector<unsigned short> &numbers,
@@ -325,7 +354,7 @@ void ApplyTransform(
     size_t ii = 3*i;
     double pt[3];
     Math3D::transform(&transform[0], Math3D::copy(pt, &basisPoints[ii]));
-    ApplyPeriodicBC(pt);
+    //ApplyPeriodicBC(pt);
 #ifdef USE_KDTREE
     if (!kdTree.Exists(pt))
 #else
@@ -429,6 +458,118 @@ void ComputePrimitiveCellPositions(
 }
 
 // **************************************************************************
+void CopyTranslate(
+      const vector<double> &basisPoints,
+      const vector<unsigned short> &basisNumbers,
+      double *offset,
+      vector<double> &points,
+      vector<unsigned short> &numbers)
+{
+  size_t nPts = basisPoints.size()/3;
+  for (size_t i = 0; i<nPts; ++i)
+    {
+    double pt[3];
+    Math3D::copy(pt, &basisPoints[3*i]);
+    Math3D::add(pt, offset);
+
+    if (!Exists(pt, points, 1e-5))
+      {
+      points.push_back(pt[0]);
+      points.push_back(pt[1]);
+      points.push_back(pt[2]);
+
+      numbers.push_back(basisNumbers[i]);
+      }
+    }
+}
+
+// **************************************************************************
+void ComputeDuplicates(
+      vector<double> &points,
+      vector<unsigned short> &numbers,
+      const vector<double> &primvec,
+      unsigned int nAPlus,
+      unsigned int nAMinus,
+      unsigned int nBPlus,
+      unsigned int nBMinus,
+      unsigned int nCPlus,
+      unsigned int nCMinus)
+{
+  vector<double> basisPoints(points);
+  vector<unsigned short> basisNumbers(numbers);
+
+  const double *a = &primvec[0];
+  const double *b = &primvec[3];
+  const double *c = &primvec[6];
+
+  // a hat
+  for (unsigned int i=1; i<=nAPlus; ++i)
+    {
+    double offset[3];
+    Math3D::copy(offset, a);
+    Math3D::scale(offset, static_cast<double>(i));
+    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    }
+
+  // -a hat
+  for (unsigned int i=1; i<=nAMinus; ++i)
+    {
+    double offset[3];
+    Math3D::copy(offset, a);
+    Math3D::scale(offset, -static_cast<double>(i));
+    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    }
+
+  if (nAMinus || nAPlus)
+    {
+    basisPoints.assign(points.begin(), points.end());
+    basisNumbers.assign(numbers.begin(), numbers.end());
+    }
+
+  // b hat
+  for (unsigned int i=1; i<=nBPlus; ++i)
+    {
+    double offset[3];
+    Math3D::copy(offset, b);
+    Math3D::scale(offset, static_cast<double>(i));
+    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    }
+
+  // -b hat
+  for (unsigned int i=1; i<=nBMinus; ++i)
+    {
+    double offset[3];
+    Math3D::copy(offset, b);
+    Math3D::scale(offset, -static_cast<double>(i));
+    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    }
+
+  if (nBMinus || nBPlus)
+    {
+    basisPoints.assign(points.begin(), points.end());
+    basisNumbers.assign(numbers.begin(), numbers.end());
+    }
+
+  // c hat
+  for (unsigned int i=1; i<=nCPlus; ++i)
+    {
+    double offset[3];
+    Math3D::copy(offset, c);
+    Math3D::scale(offset, static_cast<double>(i));
+    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    }
+
+  // -c hat
+  for (unsigned int i=1; i<=nCMinus; ++i)
+    {
+    double offset[3];
+    Math3D::copy(offset, c);
+    Math3D::scale(offset, -static_cast<double>(i));
+    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    }
+}
+
+// **************************************************************************
 int Parse(
     istream &file,
     vector<double> &lengths,
@@ -518,11 +659,14 @@ int Parse(
 vtkStandardNewMacro(vtkCIFMoleculeReader);
 
 //----------------------------------------------------------------------------
-vtkCIFMoleculeReader::vtkCIFMoleculeReader()
-      :
-  Initialized(false),
-  BondDetectionMode(ATOMIC),
-  BondProximityFactor(1.05)
+vtkCIFMoleculeReader::vtkCIFMoleculeReader() :
+      Initialized(false),
+      DuplicateAPlus(0),
+      DuplicateBPlus(0),
+      DuplicateCPlus(0),
+      DuplicateAMinus(0),
+      DuplicateBMinus(0),
+      DuplicateCMinus(0)
 {
   #ifdef vtkCIFMoleculeReaderDEBUG
   cerr << "=====vtkCIFMoleculeReader::vtkCIFMoleculeReader" << endl;
@@ -537,6 +681,25 @@ vtkCIFMoleculeReader::~vtkCIFMoleculeReader()
   #ifdef vtkCIFMoleculeReaderDEBUG
   cerr << "=====vtkCIFMoleculeReader::~vtkCIFMoleculeReader" << endl;
   #endif
+  this->Detector = nullptr;
+}
+
+
+//----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::SetBondDetector(const shared_ptr<BondDetector> &detector)
+{
+  if (detector.get() == this->Detector.get())
+    {
+    return;
+    }
+  this->Detector = detector;
+  this->Modified();
+}
+
+//----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::BondDetectorModified()
+{
+  this->Modified();
 }
 
 //----------------------------------------------------------------------------
@@ -633,6 +796,12 @@ void vtkCIFMoleculeReader::SetFileName(const char *cFileName)
   this->BasisTypes.clear();
   this->Transforms.clear();
   this->TransformLabels.clear();
+  this->DuplicateAPlus = 0;
+  this->DuplicateBPlus = 0;
+  this->DuplicateCPlus = 0;
+  this->DuplicateAMinus = 0;
+  this->DuplicateBMinus = 0;
+  this->DuplicateCMinus = 0;
 
   ifstream file(this->FileName.c_str());
   if (!file)
@@ -698,17 +867,18 @@ int vtkCIFMoleculeReader::RequestData(
           this->TransformLabels,
           this->ActiveTransforms);
 
+    //ApplyPeriodicBC(this->Positions, this->Types);
+
     // TODO -- works for this particualr case but not sure
     // how is this encoded in the file
-    double n[3] = {0.0, 1.0, 0.0};
-    double p[3] = {0.0, 0.5, 0.0};
-    Mirror(this->Positions, this->Types, n, p);
+    //double n[3] = {0.0, 1.0, 0.0};
+    //double p[3] = {0.0, 0.5, 0.0};
+    //Mirror(this->Positions, this->Types, n, p);
+    // Duplicating across the periodic boundary solves it!
 
     DuplicatePeriodicPositions(this->Positions, this->Types, 0, 1.0e-3);
+    DuplicatePeriodicPositions(this->Positions, this->Types, 1, 1.0e-3);
     DuplicatePeriodicPositions(this->Positions, this->Types, 2, 1.0e-3);
-
-    //NormalizeCoordinate(this->Positions, 0);
-    //NormalizeCoordinate(this->Positions, 2);
 
     cerr << "transformed positions" << endl;
     ::Print(cerr, this->Positions, this->Types);
@@ -722,12 +892,22 @@ int vtkCIFMoleculeReader::RequestData(
     ::Print(cerr, this->Positions, this->Types);
     cerr << endl;
 
+    ComputeDuplicates(
+        this->Positions,
+        this->Types,
+        this->CellAxes,
+        this->DuplicateAPlus,
+        this->DuplicateAMinus,
+        this->DuplicateBPlus,
+        this->DuplicateBMinus,
+        this->DuplicateCPlus,
+        this->DuplicateCMinus);
+
     BuildMolecule(
         molecule,
         this->Positions,
         this->Types,
-        this->BondDetectionMode,
-        this->BondProximityFactor);
+        this->Detector.get());
 
     #if 0 && defined(vtkCIFMoleculeReaderDEBUG)
     cerr << "port 0" << endl;

@@ -31,6 +31,8 @@
 
 #include "Utility.h"
 #include "Math3D.h"
+#include "AtomicPropertiesBondDetector.h"
+#include "TableBasedBondDetector.h"
 
 #include <string>
 #include <iostream>
@@ -42,12 +44,17 @@ using std::vector;
 using std::cerr;
 using std::endl;
 using std::ostringstream;
+using std::shared_ptr;
+using std::make_shared;
+using std::static_pointer_cast;
 
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QAction>
 #include <QDoubleValidator>
 #include <QListWidgetItem>
+
+#include "PovmolBondTableDialog.h"
 
 #define PovmolMainWindowDEBUG
 
@@ -56,7 +63,9 @@ PovmolMainWindow::PovmolMainWindow()
         :
     Renderer(0),
     Reader(0),
-    MoleculeMapper(0)
+    MoleculeMapper(0),
+    TableDetector(make_shared<TableBasedBondDetector>()),
+    PropertiesDetector(make_shared<AtomicPropertiesBondDetector>())
 {
   #ifdef PovmolMainWindowDEBUG
   cerr << ":::::PovmolMainWindow::PovmolMainWindow" << endl;
@@ -91,6 +100,7 @@ PovmolMainWindow::PovmolMainWindow()
   connect(this->Ui->WritePOVAction, SIGNAL(triggered()), this, SLOT(WritePOV()));
   connect(this->Ui->WriteImageAction, SIGNAL(triggered()), this, SLOT(WriteImage()));
   connect(this->Ui->WriteGeometryAction, SIGNAL(triggered()), this, SLOT(WriteVTK()));
+  connect(this->Ui->EditBondTableAction, SIGNAL(triggered()), this, SLOT(EditBondTable()));
   connect(this->Ui->AtomRadiusFactor, SIGNAL(editingFinished()), this, SLOT(UpdateAtomRadiusFactor()));
   connect(this->Ui->BondRadius, SIGNAL(editingFinished()), this, SLOT(UpdateBondRadius()));
   connect(this->Ui->BondDetectionMode, SIGNAL(currentIndexChanged(int)), this, SLOT(UpdateBondDetectionMode(int)));
@@ -99,6 +109,12 @@ PovmolMainWindow::PovmolMainWindow()
   connect(this->Ui->BondColorSingle, SIGNAL(toggled(bool)), this, SLOT(UpdateBondColorMode()));
   connect(this->Ui->LightIntensity, SIGNAL(valueChanged(int)), this, SLOT(UpdateLightIntensity()));
   connect(this->Ui->ActiveTransforms, SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(UpdateActiveTransforms()));
+  connect(this->Ui->DuplicateAMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateBMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateCMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateAPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateBPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateCPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
   connect(this->Ui->ViewDownX, SIGNAL(released()), this, SLOT(ViewDownX()));
   connect(this->Ui->ViewDownY, SIGNAL(released()), this, SLOT(ViewDownY()));
   connect(this->Ui->ViewDownZ, SIGNAL(released()), this, SLOT(ViewDownZ()));
@@ -153,6 +169,7 @@ void PovmolMainWindow::OpenFile()
       return;
       }
 
+    this->UpdateBondDetectionMode(this->Ui->BondDetectionMode->currentIndex());
     this->BuildPipeline();
     this->ShowTransforms();
     }
@@ -217,9 +234,6 @@ void PovmolMainWindow::BuildPipeline()
   #ifdef PovmolMainWindowDEBUG
   cerr << ":::::PovmolMainWindow::BuildPipeline" << endl;
   #endif
-  this->Reader->SetBondDetectionMode(this->Ui->BondDetectionMode->currentIndex());
-
-
   this->MoleculeMapper = vtkMoleculeMapper2::New();
   this->MoleculeMapper->SetInputConnection(this->Reader->GetOutputPort(0));
   this->MoleculeMapper->UseBallAndStickSettings();
@@ -336,9 +350,33 @@ void PovmolMainWindow::UpdateBondDetectionMode(int id)
   #endif
   if (this->Reader)
     {
-    this->Reader->SetBondDetectionMode(id);
+    if (id == TABLE)
+      {
+      this->Reader->SetBondDetector(static_pointer_cast<BondDetector>(this->TableDetector));
+      }
+    else
+      {
+      this->PropertiesDetector->SetDetectionMode(id);
+      this->Reader->SetBondDetector(static_pointer_cast<BondDetector>(this->PropertiesDetector));
+      }
+    this->Reader->BondDetectorModified();
     this->Render();
     }
+}
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateBondProximityFactor()
+{
+  #ifdef PovmolMainWindowDEBUG
+  cerr << ":::::PovmolMainWindow::UpdateBondProximityFactor" << endl;
+  #endif
+  if (this->Reader)
+    {
+    this->PropertiesDetector->SetTolerance(this->Ui->BondProximityFactor->text().toDouble());
+    this->Reader->BondDetectorModified();
+    this->Render();
+    }
+
 }
 
 // --------------------------------------------------------------------------
@@ -363,20 +401,6 @@ void PovmolMainWindow::UpdateBondRadius()
   if (this->MoleculeMapper)
     {
     this->MoleculeMapper->SetBondRadius(this->Ui->BondRadius->text().toDouble());
-    this->Render();
-    }
-
-}
-
-// --------------------------------------------------------------------------
-void PovmolMainWindow::UpdateBondProximityFactor()
-{
-  #ifdef PovmolMainWindowDEBUG
-  cerr << ":::::PovmolMainWindow::UpdateBondProximityFactor" << endl;
-  #endif
-  if (this->MoleculeMapper)
-    {
-    this->Reader->SetBondProximityFactor(this->Ui->BondProximityFactor->text().toDouble());
     this->Render();
     }
 
@@ -519,19 +543,59 @@ void PovmolMainWindow::ViewUpZ()
   this->Render();
 }
 
-  /*
 // --------------------------------------------------------------------------
-void PovmolMainWindow::closeEvent(QCloseEvent *event)
+void PovmolMainWindow::EditBondTable()
 {
-  event->ignore();
-  if (maybeSave())
+  #ifdef PovmolMainWindowDEBUG
+  cerr << ":::::PovmolMainWindow::EditBondTable" << endl;
+  #endif
+
+  PovmolBondTableDialog *dialog = new PovmolBondTableDialog(this);
+
+  TableBasedBondDetector *detector
+    = dynamic_cast<TableBasedBondDetector*>(this->TableDetector.get());
+
+  int nRows = detector->GetNumberOfRows();
+  for (int i=0; i<nRows; ++i)
     {
-    writeSettings();
-    event->accept();
+    dialog->AddRow(
+        detector->GetSourceType(i),
+        detector->GetDestinationType(i),
+        detector->GetMinLength(i),
+        detector->GetMaxLength(i));
     }
-  else
+
+  if (dialog->exec() == QDialog::Accepted)
     {
-    event->ignore();
+    detector->ClearTable();
+    int nRows = dialog->GetNumberOfRows();
+    for (int i=0; i<nRows; ++i)
+      {
+      detector->InsertTableEntry(
+            dialog->GetSourceType(i),
+            dialog->GetDestinationType(i),
+            dialog->GetMinLength(i),
+            dialog->GetMaxLength(i));
+      }
+    this->UpdateBondDetectionMode(this->Ui->BondDetectionMode->currentIndex());
     }
 }
-  */
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateDuplicates()
+{
+  #ifdef PovmolMainWindowDEBUG
+  cerr << ":::::PovmolMainWindow::UpdateDuplicates" << endl;
+  #endif
+
+  if (this->Reader)
+    {
+    this->Reader->SetDuplicateAMinus(this->Ui->DuplicateAMinus->value());
+    this->Reader->SetDuplicateBMinus(this->Ui->DuplicateBMinus->value());
+    this->Reader->SetDuplicateCMinus(this->Ui->DuplicateCMinus->value());
+    this->Reader->SetDuplicateAPlus(this->Ui->DuplicateAPlus->value());
+    this->Reader->SetDuplicateBPlus(this->Ui->DuplicateBPlus->value());
+    this->Reader->SetDuplicateCPlus(this->Ui->DuplicateCPlus->value());
+    this->Render();
+    }
+}
