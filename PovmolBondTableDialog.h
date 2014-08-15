@@ -5,8 +5,6 @@
 #include "ui_PovmolBondTableDialogUi.h"
 class QStandardItemModel;
 
-//#include "AtomTypeDelegate.h"
-
 class PovmolBondTableDialog : public QDialog
 {
 private:
@@ -35,7 +33,6 @@ public slots:
 private:
   Ui_PovmolBondTableDialogUi *Ui;
   QStandardItemModel *BondTableModel;
-  //AtomTypeDelegate *AtomTypes;
 };
 
 #endif

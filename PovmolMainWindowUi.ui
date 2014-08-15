@@ -6,15 +6,15 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>703</width>
-    <height>444</height>
+    <width>714</width>
+    <height>665</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>povmol</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QHBoxLayout" name="horizontalLayout_7">
+   <layout class="QHBoxLayout" name="horizontalLayout_9">
     <item>
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
@@ -419,7 +419,115 @@
           </item>
          </layout>
         </item>
+        <item row="10" column="0">
+         <widget class="QLabel" name="label_11">
+          <property name="text">
+           <string>Ghost Bonds</string>
+          </property>
+         </widget>
+        </item>
+        <item row="10" column="1">
+         <widget class="QCheckBox" name="GhostBonds">
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+        <item row="11" column="0">
+         <widget class="QLabel" name="coordinationSiteAlphaLabel">
+          <property name="text">
+           <string>Coordination Site Alpha</string>
+          </property>
+         </widget>
+        </item>
+        <item row="11" column="1">
+         <widget class="QSlider" name="CoordinationSiteAlpha">
+          <property name="maximum">
+           <number>256</number>
+          </property>
+          <property name="value">
+           <number>256</number>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
        </layout>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="groupBox_3">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>270</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="title">
+         <string>Sites</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <item>
+          <widget class="QVTKPropertyWidget" name="SiteProperties" native="true"/>
+         </item>
+         <item>
+          <widget class="QListWidget" name="ActiveSites">
+           <property name="maximumSize">
+            <size>
+             <width>250</width>
+             <height>16777215</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="CoordinationSites">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>270</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="title">
+         <string>Coordination Sites</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_3">
+         <item>
+          <widget class="QVTKPropertyWidget" name="CoordinationSiteProperties" native="true"/>
+         </item>
+         <item>
+          <widget class="QListWidget" name="ActiveCoordinationSites">
+           <property name="maximumSize">
+            <size>
+             <width>250</width>
+             <height>16777215</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
       </item>
       <item>
        <widget class="QGroupBox" name="groupBox_2">
@@ -439,6 +547,12 @@
          <string>Active Transforms</string>
         </property>
         <layout class="QHBoxLayout" name="horizontalLayout_3">
+         <property name="topMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>4</number>
+         </property>
          <item>
           <widget class="QListWidget" name="ActiveTransforms">
            <property name="maximumSize">
@@ -490,7 +604,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>703</width>
+     <width>714</width>
      <height>20</height>
     </rect>
    </property>
@@ -509,6 +623,9 @@
      <string>Edit</string>
     </property>
     <addaction name="EditBondTableAction"/>
+    <addaction name="EditLookupTableAction"/>
+    <addaction name="actionMolecule_Properties"/>
+    <addaction name="actionCoordination_Site_Properties"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -544,12 +661,33 @@
     <string>Bond tables...</string>
    </property>
   </action>
+  <action name="EditLookupTableAction">
+   <property name="text">
+    <string>Lookup table...</string>
+   </property>
+  </action>
+  <action name="actionMolecule_Properties">
+   <property name="text">
+    <string>Molecule Properties...</string>
+   </property>
+  </action>
+  <action name="actionCoordination_Site_Properties">
+   <property name="text">
+    <string>Coordination Site Properties...</string>
+   </property>
+  </action>
  </widget>
  <customwidgets>
   <customwidget>
    <class>QVTKWidget</class>
    <extends>QWidget</extends>
    <header>QVTKWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>QVTKPropertyWidget</class>
+   <extends>QWidget</extends>
+   <header>QVTKPropertyWidget.h</header>
+   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources/>

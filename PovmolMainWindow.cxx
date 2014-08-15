@@ -28,6 +28,8 @@
 #include "vtkAxesActor.h"
 #include "vtkOrientationMarkerWidget.h"
 #include "vtkCamera.h"
+#include "vtkLookupTable.h"
+#include "vtkPOVExporter.h"
 
 #include "Utility.h"
 #include "Math3D.h"
@@ -49,14 +51,30 @@ using std::make_shared;
 using std::static_pointer_cast;
 
 #include <QFileDialog>
+#include <QColorDialog>
 #include <QMessageBox>
 #include <QAction>
 #include <QDoubleValidator>
 #include <QListWidgetItem>
+#include <QColor>
+#include <QPixmap>
+#include <QIcon>
 
 #include "PovmolBondTableDialog.h"
+#include "PovmolLookupTableDialog.h"
 
 #define PovmolMainWindowDEBUG
+
+namespace {
+// **************************************************************************
+QIcon makeColorSwatch(QColor color)
+{
+  QPixmap patch(24, 24);
+  patch.fill(color);
+  QIcon swatch(patch);
+  return swatch;
+}
+};
 
 // --------------------------------------------------------------------------
 PovmolMainWindow::PovmolMainWindow()
@@ -64,8 +82,10 @@ PovmolMainWindow::PovmolMainWindow()
     Renderer(0),
     Reader(0),
     MoleculeMapper(0),
+    CoordinationSiteActor(0),
     TableDetector(make_shared<TableBasedBondDetector>()),
-    PropertiesDetector(make_shared<AtomicPropertiesBondDetector>())
+    PropertiesDetector(make_shared<AtomicPropertiesBondDetector>()),
+    DepthPeelingEnabled(false)
 {
   #ifdef PovmolMainWindowDEBUG
   cerr << ":::::PovmolMainWindow::PovmolMainWindow" << endl;
@@ -75,14 +95,13 @@ PovmolMainWindow::PovmolMainWindow()
   this->Ui->BondRadius->setValidator(new QDoubleValidator(this->Ui->BondRadius));
   this->Ui->AtomRadiusFactor->setValidator(new QDoubleValidator(this->Ui->AtomRadiusFactor));
 
-  //his->Ui->ViewWidget->GetRenderWindow()->SetSize(
-
   this->Renderer = vtkRenderer::New();
   this->Ui->ViewWidget->GetRenderWindow()->AddRenderer(this->Renderer);
   this->Renderer->Delete();
   this->Renderer->SetBackground2(0.08,0.08,0.08);
   this->Renderer->SetBackground2(0.87,0.87,0.87);
   this->Renderer->GradientBackgroundOn();
+
   this->UpdateLightIntensity();
 
   vtkAxesActor *axes = vtkAxesActor::New();
@@ -101,6 +120,7 @@ PovmolMainWindow::PovmolMainWindow()
   connect(this->Ui->WriteImageAction, SIGNAL(triggered()), this, SLOT(WriteImage()));
   connect(this->Ui->WriteGeometryAction, SIGNAL(triggered()), this, SLOT(WriteVTK()));
   connect(this->Ui->EditBondTableAction, SIGNAL(triggered()), this, SLOT(EditBondTable()));
+  connect(this->Ui->EditLookupTableAction, SIGNAL(triggered()), this, SLOT(EditLookupTable()));
   connect(this->Ui->AtomRadiusFactor, SIGNAL(editingFinished()), this, SLOT(UpdateAtomRadiusFactor()));
   connect(this->Ui->BondRadius, SIGNAL(editingFinished()), this, SLOT(UpdateBondRadius()));
   connect(this->Ui->BondDetectionMode, SIGNAL(currentIndexChanged(int)), this, SLOT(UpdateBondDetectionMode(int)));
@@ -109,20 +129,27 @@ PovmolMainWindow::PovmolMainWindow()
   connect(this->Ui->BondColorSingle, SIGNAL(toggled(bool)), this, SLOT(UpdateBondColorMode()));
   connect(this->Ui->LightIntensity, SIGNAL(valueChanged(int)), this, SLOT(UpdateLightIntensity()));
   connect(this->Ui->ActiveTransforms, SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(UpdateActiveTransforms()));
+  connect(this->Ui->ActiveSites, SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(UpdateSites()));
+  connect(this->Ui->CoordinationSites, SIGNAL(toggled(bool)), this, SLOT(EnableCoordinationSites(bool)));
+  connect(this->Ui->ActiveCoordinationSites, SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(UpdateCoordinationSites()));
+  connect(this->Ui->ActiveCoordinationSites, SIGNAL(itemDoubleClicked(QListWidgetItem*)), this, SLOT(UpdateCoordinationSiteColor(QListWidgetItem*)));
   connect(this->Ui->DuplicateAMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
   connect(this->Ui->DuplicateBMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
   connect(this->Ui->DuplicateCMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
   connect(this->Ui->DuplicateAPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
   connect(this->Ui->DuplicateBPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
   connect(this->Ui->DuplicateCPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->GhostBonds, SIGNAL(toggled(bool)), this, SLOT(UpdateGhostBonds(bool)));
   connect(this->Ui->ViewDownX, SIGNAL(released()), this, SLOT(ViewDownX()));
   connect(this->Ui->ViewDownY, SIGNAL(released()), this, SLOT(ViewDownY()));
   connect(this->Ui->ViewDownZ, SIGNAL(released()), this, SLOT(ViewDownZ()));
   connect(this->Ui->ViewUpX, SIGNAL(released()), this, SLOT(ViewUpX()));
   connect(this->Ui->ViewUpY, SIGNAL(released()), this, SLOT(ViewUpY()));
   connect(this->Ui->ViewUpZ, SIGNAL(released()), this, SLOT(ViewUpZ()));
-  
-  //connect(this->Ui->actionExit, SIGNAL(triggered()), this, SLOT(slotExit()));
+  connect(this->Ui->CoordinationSiteProperties, SIGNAL(Translucent(bool)), this, SLOT(EnableDepthPeeling(bool)));
+  connect(this->Ui->CoordinationSiteProperties, SIGNAL(Modified()), this, SLOT(Render()));
+  connect(this->Ui->SiteProperties, SIGNAL(Modified()), this, SLOT(Render()));
+
 }
 
 // --------------------------------------------------------------------------
@@ -172,7 +199,28 @@ void PovmolMainWindow::OpenFile()
     this->UpdateBondDetectionMode(this->Ui->BondDetectionMode->currentIndex());
     this->BuildPipeline();
     this->ShowTransforms();
+    this->ShowSites();
+    this->ShowCoordinationSites();
     }
+}
+
+// ----------------------------------------------------------------------------
+void PovmolMainWindow::EnableDepthPeeling(bool enabled)
+{
+  if (this->DepthPeelingEnabled == enabled) return;
+  this->DepthPeelingEnabled = enabled;
+  // 1. Use a render window with alpha bits (as initial value is 0 (false)):
+  // 2. Force to not pick a framebuffer with a multisample buffer
+  // 3. Choose to use depth peeling (if supported) (initial value is 0 (false)):
+  // 4. Set depth peeling parameters
+  vtkRenderWindow *renderWindow = this->Ui->ViewWidget->GetRenderWindow();
+  renderWindow->SetAlphaBitPlanes(enabled);
+  renderWindow->SetMultiSamples(enabled?0:8);
+
+  vtkRenderer *renderer = this->Renderer;
+  renderer->SetUseDepthPeeling(enabled);
+  renderer->SetMaximumNumberOfPeels(200);
+  renderer->SetOcclusionRatio(0.1);
 }
 
 // --------------------------------------------------------------------------
@@ -208,6 +256,158 @@ void PovmolMainWindow::UpdateActiveTransforms()
 }
 
 // --------------------------------------------------------------------------
+void PovmolMainWindow::ShowSites()
+{
+  size_t n = this->Reader->GetNumberOfSites();
+  for (size_t i=0; i<n; ++i)
+    {
+    QListWidgetItem *item = new QListWidgetItem;
+    item->setData(Qt::DisplayRole, this->Reader->GetSiteLabel(i));
+    item->setData(Qt::CheckStateRole, Qt::Checked);
+    this->Ui->ActiveSites->addItem(item);
+    }
+}
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateSites()
+{
+  if (this->Reader)
+    {
+    int n = this->Ui->ActiveSites->count();
+    for (int i=0; i<n; ++i)
+      {
+      QListWidgetItem *item = this->Ui->ActiveSites->item(i);
+      if (item->checkState() == Qt::Checked)
+        {
+        this->Reader->ActivateSite(i);
+        }
+      else
+        {
+        this->Reader->DeactivateSite(i);
+        }
+      }
+    this->Render();
+    }
+}
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::ShowCoordinationSites()
+{
+  size_t n = this->Reader->GetNumberOfSites();
+  for (size_t i=0; i<n; ++i)
+    {
+    QListWidgetItem *item = new QListWidgetItem;
+    item->setData(Qt::DisplayRole, this->Reader->GetSiteLabel(i));
+    item->setData(Qt::CheckStateRole, Qt::Unchecked);
+    item->setData(Qt::UserRole  , 255);
+    item->setData(Qt::UserRole+1, 255);
+    item->setData(Qt::UserRole+2, 255);
+    item->setIcon(makeColorSwatch(QColor(255,255,255)));
+    this->Ui->ActiveCoordinationSites->addItem(item);
+    }
+
+
+  vtkLookupTable *lut = vtkLookupTable::New();
+  lut->SetNumberOfTableValues(n);
+
+  this->UpdateCoordinationSiteColors(lut);
+
+  vtkPolyDataMapper *mapper
+     = dynamic_cast<vtkPolyDataMapper*>(this->CoordinationSiteActor->GetMapper());
+  mapper->SetScalarModeToUsePointData();
+  mapper->SelectColorArray("label ids");
+  mapper->SetColorModeToMapScalars();
+  mapper->ScalarVisibilityOn();
+  mapper->SetScalarRange(0,n-1);
+  mapper->SetLookupTable(lut);
+  lut->Delete();
+}
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateCoordinationSites()
+{
+  if (this->Reader)
+    {
+    int n = this->Ui->ActiveCoordinationSites->count();
+    for (int i=0; i<n; ++i)
+      {
+      QListWidgetItem *item = this->Ui->ActiveCoordinationSites->item(i);
+      if (item->checkState() == Qt::Checked)
+        {
+        this->Reader->ActivateCoordinationSite(i);
+        }
+      else
+        {
+        this->Reader->DeactivateCoordinationSite(i);
+        }
+      }
+    this->Render();
+    }
+}
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateCoordinationSiteColors(vtkLookupTable *lut)
+{
+  int nColors = this->Ui->ActiveCoordinationSites->count();
+  for (int i=0; i<nColors; ++i)
+    {
+    QListWidgetItem *site = this->Ui->ActiveCoordinationSites->item(i);
+
+    double r = site->data(Qt::UserRole  ).toDouble()/255.0;
+    double g = site->data(Qt::UserRole+1).toDouble()/255.0;
+    double b = site->data(Qt::UserRole+2).toDouble()/255.0;
+
+    lut->SetTableValue(i, r, g, b, 1.0);
+    }
+  lut->Modified();
+}
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateCoordinationSiteColor(QListWidgetItem *site)
+{
+  QColor currentColor(
+    site->data(Qt::UserRole  ).toInt(),
+    site->data(Qt::UserRole+1).toInt(),
+    site->data(Qt::UserRole+2).toInt());
+
+  QColor newColor = QColorDialog::getColor(currentColor, this);
+  if (newColor.isValid())
+    {
+    site->setIcon(makeColorSwatch(newColor));
+    site->setData(Qt::UserRole  , newColor.red());
+    site->setData(Qt::UserRole+1, newColor.green());
+    site->setData(Qt::UserRole+2, newColor.blue());
+    }
+
+  vtkPolyDataMapper *mapper
+    = dynamic_cast<vtkPolyDataMapper*>(this->CoordinationSiteActor->GetMapper());
+
+  vtkLookupTable *lut
+    = dynamic_cast<vtkLookupTable*>(mapper->GetLookupTable());
+
+  this->UpdateCoordinationSiteColors(lut);
+
+  this->Render();
+}
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::EnableCoordinationSites(bool v)
+{
+  if (this->Reader)
+    {
+    if (v)
+      {
+      this->Reader->SetGenerateCoordinationSites(1);
+      }
+    else
+      {
+      this->Reader->SetGenerateCoordinationSites(0);
+      }
+    this->Render();
+    }
+}
+
+// --------------------------------------------------------------------------
 void PovmolMainWindow::Initialize()
 {
   #ifdef PovmolMainWindowDEBUG
@@ -225,6 +425,12 @@ void PovmolMainWindow::Initialize()
     this->MoleculeMapper = NULL;
     }
 
+  if (this->CoordinationSiteActor)
+    {
+    this->CoordinationSiteActor->Delete();
+    this->CoordinationSiteActor = NULL;
+    }
+
   this->Ui->ActiveTransforms->clear();
 }
 
@@ -234,6 +440,8 @@ void PovmolMainWindow::BuildPipeline()
   #ifdef PovmolMainWindowDEBUG
   cerr << ":::::PovmolMainWindow::BuildPipeline" << endl;
   #endif
+
+  // molecule
   this->MoleculeMapper = vtkMoleculeMapper2::New();
   this->MoleculeMapper->SetInputConnection(this->Reader->GetOutputPort(0));
   this->MoleculeMapper->UseBallAndStickSettings();
@@ -242,15 +450,34 @@ void PovmolMainWindow::BuildPipeline()
   this->MoleculeMapper->SetPOVRayStreaming(true);
 
   vtkActor *molActor = vtkActor::New();
-  molActor->GetProperty()->SetAmbient(0.1);
+
+  molActor->GetProperty()->SetAmbient(0.3);
   molActor->GetProperty()->SetSpecular(0.5);
   molActor->GetProperty()->SetDiffuse(0.2);
+  this->Ui->SiteProperties->SetProperty(molActor->GetProperty());
+
   molActor->SetMapper(this->MoleculeMapper);
 
   this->Renderer->AddActor(molActor);
 
+  // coordination polyhedra
+  vtkPolyDataMapper *polyhedraMapper = vtkPolyDataMapper::New();
+  polyhedraMapper->SetInputConnection(this->Reader->GetOutputPort(1));
+  //polyhedraMapper->SetScalarModeToUseCellData();
+  //polyhedraMapper->ScalarVisibilityOn();
+
+  this->CoordinationSiteActor = vtkActor::New();
+  this->Ui->CoordinationSiteProperties->SetProperty(this->CoordinationSiteActor->GetProperty());
+
+  //this->CoordinationSiteActor->GetProperty()->EdgeVisibilityOn();
+  this->CoordinationSiteActor->SetMapper(polyhedraMapper);
+  polyhedraMapper->Delete();
+
+  this->Renderer->AddActor(this->CoordinationSiteActor);
+
+  // axes
   vtkPolyDataMapper *axesMapper = vtkPolyDataMapper::New();
-  axesMapper->SetInputConnection(this->Reader->GetOutputPort(1));
+  axesMapper->SetInputConnection(this->Reader->GetOutputPort(2));
   axesMapper->SetScalarModeToUseCellData();
   axesMapper->ScalarVisibilityOn();
 
@@ -309,14 +536,29 @@ void PovmolMainWindow::WritePOV()
   #ifdef PovmolMainWindowDEBUG
   cerr << ":::::PovmolMainWindow::WritePOV" << endl;
   #endif
+
+  // molecule
   string fileName = QFileDialog::getSaveFileName(
-    this, tr("Export"), "", tr("POVRay (*.pov)")).toStdString();
+    this, tr("Export molecule"), "", tr("POVRay (*.pov)")).toStdString();
 
   if (fileName != "")
     {
     ofstream povf(fileName.c_str());
     povf << this->MoleculeMapper->GetPOVRayStream() << endl;
     cerr << "wrote " << fileName << endl;
+    }
+
+  // the rest of the geometry
+  fileName = QFileDialog::getSaveFileName(
+    this, tr("Export geometry"), "", tr("POVRay (*.pov)")).toStdString();
+
+  if (fileName != "")
+    {
+    vtkPOVExporter *e = vtkPOVExporter::New();
+    e->SetFileName(fileName.c_str());
+    e->SetRenderWindow(this->Ui->ViewWidget->GetRenderWindow());
+    e->Write();
+    e->Delete();
     }
 }
 
@@ -436,7 +678,7 @@ void PovmolMainWindow::UpdateLightIntensity()
   vtkLightCollection *lc = this->Renderer->GetLights();
   lc->InitTraversal();
   vtkLight *l;
-  while (l = lc->GetNextItem())
+  while ((l = lc->GetNextItem()))
     {
     l->SetIntensity(intensity);
     }
@@ -577,7 +819,37 @@ void PovmolMainWindow::EditBondTable()
             dialog->GetMinLength(i),
             dialog->GetMaxLength(i));
       }
-    this->UpdateBondDetectionMode(this->Ui->BondDetectionMode->currentIndex());
+    int id = this->Ui->BondDetectionMode->currentIndex();
+    if (id == TABLE)
+      {
+      this->UpdateBondDetectionMode(id);
+      }
+    }
+}
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::EditLookupTable()
+{
+  #ifdef PovmolMainWindowDEBUG
+  cerr << ":::::PovmolMainWindow::EditLookupTable" << endl;
+  #endif
+  if (this->MoleculeMapper)
+    {
+    vtkLookupTable *atomLut = this->MoleculeMapper->GetAtomLookupTable();
+    PovmolLookupTableDialog *dialog = new PovmolLookupTableDialog(this);
+    dialog->Initialize(atomLut);
+    if (dialog->exec() == QDialog::Accepted)
+      {
+      dialog->CopyTo(atomLut);
+      atomLut->Modified();
+
+      //vtkLookupTable *bondLut = this->MoleculeMapper->GetBondLookupTable();
+      //dialog->CopyTo(bondLut);
+      //bondLut->Modified();
+
+      this->MoleculeMapper->LookupTableModified();
+      this->Render();
+      }
     }
 }
 
@@ -599,3 +871,49 @@ void PovmolMainWindow::UpdateDuplicates()
     this->Render();
     }
 }
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateGhostBonds(bool v)
+{
+  #ifdef PovmolMainWindowDEBUG
+  cerr << ":::::PovmolMainWindow::UpdateGhostBonds" << endl;
+  #endif
+  if (this->Reader)
+    {
+    if (v)
+      {
+      this->Reader->SetGenerateGhostBonds(1);
+      }
+    else
+      {
+      this->Reader->SetGenerateGhostBonds(0);
+      }
+    this->Render();
+    }
+}
+
+/*
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateCoordinationSiteAlpha()
+{
+  #ifdef PovmolMainWindowDEBUG
+  cerr << ":::::PovmolMainWindow::UpdateCoordinationSiteAlpha" << endl;
+  #endif
+  double alpha
+    = static_cast<double>(this->Ui->CoordinationSiteAlpha->value()) /
+         static_cast<double>(this->Ui->CoordinationSiteAlpha->maximum());
+
+  if (alpha >= 0.9999999)
+    {
+    this->EnableDepthPeeling(false);
+    }
+  else
+    {
+    this->EnableDepthPeeling(true);
+    }
+
+  this->CoordinationSiteActor->GetProperty()->SetOpacity(alpha);
+
+  this->Render();
+}
+*/

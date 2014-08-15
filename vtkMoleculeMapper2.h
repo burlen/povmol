@@ -39,6 +39,7 @@ class vtkRenderer;
 class vtkSelection;
 class vtkSphereSource;
 class vtkTrivialProducer;
+class vtkLookupTable;
 
 class vtkMoleculeMapper2 : public vtkMapper
 {
@@ -226,6 +227,19 @@ public:
 
   vtkPolyData *GetBonds() { return this->BondGlyphPolyData.GetPointer(); }
   vtkPolyData *GetAtoms() { return this->AtomGlyphPolyData.GetPointer(); }
+
+  // Description:
+  // Set/Get the lookup tabole used to color atoms. The default LUT
+  // contains the Blue Obelisk colors.
+  vtkLookupTable *GetAtomLookupTable();
+  void SetAtomLookupTable(vtkLookupTable *lut);
+
+  vtkLookupTable *GetBondLookupTable();
+  void SetBondLookupTable(vtkLookupTable *lut);
+
+  // Description:
+  // Notify the mapper that you changed the lookup table.
+  void LookupTableModified();
 
 protected:
   vtkMoleculeMapper2();

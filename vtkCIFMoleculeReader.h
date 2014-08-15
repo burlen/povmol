@@ -73,6 +73,43 @@ public:
   // Deactivate all symmetry transforms.
   void DeacivateTransforms();
 
+
+  // Description:
+  // Return the number of symmetry transforms in the file
+  size_t GetNumberOfSites(){ return this->BasisLabels.size(); }
+
+  // Description:
+  // Get the i'th symmetry transform's label
+  const char *GetSiteLabel(size_t i){ return this->BasisLabels[i].c_str(); }
+
+  // Description:
+  // Activate/Deactive the i'th symmetry transform
+  void ActivateSite(size_t i);
+  void DeactivateSite(size_t i);
+
+  // Description:
+  // Deactivate all symmetry transforms.
+  void DeacivateSites();
+
+  // Description:
+  // Activate/Deactive the i'th symmetry transform
+  void ActivateCoordinationSite(size_t i);
+  void DeactivateCoordinationSite(size_t i);
+
+  // Description:
+  // Deactivate all symmetry transforms.
+  void DeacivateCoordinationSites();
+
+  // Description:
+  // Enable/Disable coordination site generation and rendering.
+  vtkSetMacro(GenerateCoordinationSites, int);
+  vtkGetMacro(GenerateCoordinationSites, int);
+
+  // Description:
+  // Enable/Disable ghost bonds
+  vtkSetMacro(GenerateGhostBonds, int);
+  vtkGetMacro(GenerateGhostBonds, int);
+
   // Description:
   // Set the number of duplicate in primitive vector
   // directions
@@ -108,11 +145,19 @@ private:
   // crystal structure etc
   std::vector<double> BasisPositions;
   std::vector<unsigned short> BasisTypes;
+  std::vector<std::string> BasisLabels;
+  std::vector<int> BasisLabelIds;
+  std::vector<bool> BasisSites;
+  std::vector<bool> BasisCoordinationSites;
   std::vector<std::vector<double> > Transforms;
   std::vector<std::string> TransformLabels;
   std::vector<bool> ActiveTransforms;
   std::vector<double> Positions;
   std::vector<unsigned short> Types;
+  std::vector<std::string> Labels;
+  std::vector<int> LabelIds;
+  std::vector<bool> Sites;
+  std::vector<bool> CoordinationSites;
 
   std::shared_ptr<BondDetector> Detector;
 
@@ -122,6 +167,9 @@ private:
   unsigned int DuplicateAMinus;
   unsigned int DuplicateBMinus;
   unsigned int DuplicateCMinus;
+
+  int GenerateCoordinationSites;
+  int GenerateGhostBonds;
 
 private:
   vtkCIFMoleculeReader(const vtkCIFMoleculeReader&);  // Not implemented.

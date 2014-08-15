@@ -205,6 +205,48 @@ void vtkMoleculeMapper2::UseFastSettings()
 }
 
 //----------------------------------------------------------------------------
+vtkLookupTable *vtkMoleculeMapper2::GetAtomLookupTable()
+{
+  return
+    dynamic_cast<vtkLookupTable*>(this->AtomGlyphMapper->GetLookupTable());
+}
+
+//----------------------------------------------------------------------------
+void vtkMoleculeMapper2::SetAtomLookupTable(vtkLookupTable *lut)
+{
+  if (dynamic_cast<vtkLookupTable*>(this->AtomGlyphMapper->GetLookupTable()) == lut)
+    {
+    return;
+    }
+  this->AtomGlyphMapper->SetLookupTable(lut);
+  this->Modified();
+}
+
+//----------------------------------------------------------------------------
+vtkLookupTable *vtkMoleculeMapper2::GetBondLookupTable()
+{
+  return
+    dynamic_cast<vtkLookupTable*>(this->BondGlyphMapper->GetLookupTable());
+}
+
+//----------------------------------------------------------------------------
+void vtkMoleculeMapper2::SetBondLookupTable(vtkLookupTable *lut)
+{
+  if (dynamic_cast<vtkLookupTable*>(this->BondGlyphMapper->GetLookupTable()) == lut)
+    {
+    return;
+    }
+  this->BondGlyphMapper->SetLookupTable(lut);
+  this->Modified();
+}
+
+//----------------------------------------------------------------------------
+void vtkMoleculeMapper2::LookupTableModified()
+{
+  this->Modified();
+}
+
+//----------------------------------------------------------------------------
 const char * vtkMoleculeMapper2::GetAtomicRadiusTypeAsString()
 {
   switch (this->AtomicRadiusType)
@@ -707,8 +749,10 @@ void vtkMoleculeMapper2::UpdateBondGlyphPolyData()
       cylColors->SetName("Colors");
       this->BondGlyphPolyData->GetPointData()->SetScalars(cylColors);
       vtkNew<vtkLookupTable> lut;
-      this->PeriodicTable->GetDefaultLUT(lut.GetPointer());
+      lut->DeepCopy(this->AtomGlyphMapper->GetLookupTable());
+      //this->PeriodicTable->GetDefaultLUT(lut.GetPointer());
       this->BondGlyphMapper->SetLookupTable(lut.GetPointer());
+      //is->BondGlyphMapper->SetLookupTable(this->AtomGlyphMapper->GetLookupTable());
       this->BondGlyphMapper->SetScalarRange
         (0, this->PeriodicTable->GetNumberOfElements());
       this->BondGlyphMapper->SetScalarModeToUsePointData();

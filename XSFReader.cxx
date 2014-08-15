@@ -298,6 +298,11 @@ int Read(const string &fileName, vtkMolecule *molecule, vtkStructuredGrid *sgrid
   vector<double> ax;
   vector<double> af;
   vector<unsigned short> an;
+  vector<string> al;
+  vector<int> ali;
+  vector<bool> as;
+  vector<bool> acs;
+  vector<bool> gh;
   if (ReadXSFAtoms(file, ax, af, an))
     {
     cerr << "ERROR: reading atoms" << endl;
@@ -308,7 +313,14 @@ int Read(const string &fileName, vtkMolecule *molecule, vtkStructuredGrid *sgrid
   AtomicPropertiesBondDetector *detector = new AtomicPropertiesBondDetector;
   detector->SetDetectionMode(AtomicProperties::ATOMIC);
   detector->SetTolerance(1.05);
-  BuildMolecule(molecule, ax, an, detector);
+
+  al.resize(an.size());
+  ali.resize(an.size());
+  as.resize(an.size(), true);
+  acs.resize(an.size(), false);
+  gh.resize(an.size(), false);
+
+  BuildMolecule(molecule, ax, an, al, ali, as, acs, gh, detector);
   delete detector;
 
   if (ReadXSFGrid(file, sgrid))

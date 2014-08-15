@@ -50,7 +50,7 @@ using std::numeric_limits;
 using std::back_inserter;
 using std::shared_ptr;
 
-#define vtkCIFMoleculeReaderDEBUG
+//#define vtkCIFMoleculeReaderDEBUG
 
 namespace {
 
@@ -58,15 +58,25 @@ namespace {
 void Print(
     ostream &os,
     const vector<double> &positions,
-    const vector<unsigned short> &types)
+    const vector<unsigned short> &types,
+    const vector<string> &labels,
+    const vector<bool> &sites,
+    const vector<bool> &coordinationSites)
 {
   size_t n = types.size();
   for (size_t i=0; i<n; ++i)
     {
     size_t ii = 3*i;
     os
-      << setw(4) << i << setw(6) << types[i] << setw(6) << AtomicProperties::Symbol(types[i])
-      << setw(15) << positions[ii] << setw(15) << positions[ii+1] << setw(15) << positions[ii+2]
+      << setw(4) << i
+      << setw(4) << types[i]
+      << setw(4) << AtomicProperties::Symbol(types[i])
+      << setw(6) << labels[i]
+      << setw(13) << positions[ii]
+      << setw(13) << positions[ii+1]
+      << setw(13) << positions[ii+2]
+      << setw(3) << static_cast<int>(sites[i])
+      << setw(3) << static_cast<int>(coordinationSites[i])
       << endl;
     }
 }
@@ -155,6 +165,120 @@ int ParsePositions(istream &file, vector<double> &positions)
 }
 
 // **************************************************************************
+int ParseLabels(istream &file, vector<string> &labels)
+{
+  size_t n = 0;
+  if (!(file >> n))
+    {
+    pError(cerr) << "length not found." << endl;
+    return -1;
+    }
+  labels.resize(n);
+  for (size_t i = 0; i<n; ++i)
+    {
+    if ( !(file >> labels[i]) )
+      {
+      pError(cerr) << i << " invalid label" << endl;
+      return -1;
+      }
+    }
+  return 0;
+}
+
+// **************************************************************************
+int Parse(
+    istream &file,
+    vector<double> &lengths,
+    vector<double> &angles,
+    vector<double> &positions,
+    vector<unsigned short> &numbers,
+    vector<string> &labels,
+    vector<vector<double> > &transforms,
+    vector<string> &transformLabels)
+{
+  string type, ver;
+  file >> type >> ver;
+  if (type != "CIFPP")
+    {
+    pError(cerr) << "read failed, this is not a cifpp file" << endl;
+    return -1;
+    }
+
+  lengths.resize(3, 0.0);
+  angles.resize(3, 0.0);
+
+  string label;
+  while (file && file >> label)
+    {
+    cerr << "parsing " << label << endl;
+    if ((label == "_cell_length_a") && !(file >> lengths[0]))
+      {
+      pError(cerr) << "Failed to read " << label << endl;
+      return -1;
+      }
+    else
+    if ((label == "_cell_length_b") && !(file >> lengths[1]))
+      {
+      pError(cerr) << "Failed to read " << label << endl;
+      return -1;
+      }
+    else
+    if ((label == "_cell_length_c") && !(file >> lengths[2]))
+      {
+      pError(cerr) << "Failed to read " << label << endl;
+      return -1;
+      }
+    else
+    if ((label == "_cell_angle_alpha") && !(file >> angles[0]))
+      {
+      pError(cerr) << "Failed to read " << label << endl;
+      return -1;
+      }
+    else
+    if ((label == "_cell_angle_beta") && !(file >> angles[1]))
+      {
+      pError(cerr) << "Failed to read " << label << endl;
+      return -1;
+      }
+    else
+    if ((label == "_cell_angle_gamma") && !(file >> angles[2]))
+      {
+      pError(cerr) << "Failed to read " << label << endl;
+      return -1;
+      }
+    else
+    if ( (label == "_symmetry_transforms")
+      && ParseTransforms(file, transforms, transformLabels) )
+      {
+      pError(cerr) << "Failed to read transforms" << endl;
+      return -1;
+      }
+    else
+    if ( (label == "_atom_site_type_symbol")
+      && ParseTypes(file, numbers) )
+      {
+      pError(cerr) << "Failed to read types" << endl;
+      return -1;
+      }
+    else
+    if ( (label == "_atom_site_fract_xyz")
+      && ParsePositions(file, positions) )
+      {
+      pError(cerr) << "Failed to read positions" << endl;
+      return -1;
+      }
+    else
+    if ( (label == "_atom_site_label")
+      && ParseLabels(file, labels) )
+      {
+      pError(cerr) << "Failed to read labels" << endl;
+      return -1;
+      }
+    }
+  return 0;
+}
+
+// **************************************************************************
 bool Exists(double *pt, const vector<double> &pts, double tol)
 {
   //return false;
@@ -234,6 +358,10 @@ void NormalizeCoordinate(vector<double> &points, int dir)
 void DuplicatePeriodicPositions(
       vector<double> &points,
       vector<unsigned short> &numbers,
+      vector<string> &labels,
+      vector<int> &labelIds,
+      vector<bool> &activeSites,
+      vector<bool> &activeCoordinationSites,
       int dir,
       double tol)
 {
@@ -245,12 +373,19 @@ void DuplicatePeriodicPositions(
       {
       double tmp[3] = {points[ii], points[ii+1], points[ii+2]};
       tmp[dir] = 1.0;
-      // position
+
       points.push_back(tmp[0]);
       points.push_back(tmp[1]);
       points.push_back(tmp[2]);
-      // type
+
       numbers.push_back(numbers[i]);
+
+      labels.push_back(labels[i]);
+
+      labelIds.push_back(labelIds[i]);
+
+      activeSites.push_back(activeSites[i]);
+      activeCoordinationSites.push_back(activeCoordinationSites[i]);
       }
     }
 }
@@ -259,6 +394,8 @@ void DuplicatePeriodicPositions(
 void Mirror(
       vector<double> &points,
       vector<unsigned short> &numbers,
+      vector<string> &labels,
+      vector<int> &labelIds,
       double *n,
       double *p)
 {
@@ -274,12 +411,15 @@ void Mirror(
     Math3D::add(pt, p);
     if (!Exists(pt, points, 1e-5))
       {
-      // position
       mirroredPoints.push_back(pt[0]);
       mirroredPoints.push_back(pt[1]);
       mirroredPoints.push_back(pt[2]);
-      // type
+
       numbers.push_back(numbers[i]);
+
+      labels.push_back(labels[i]);
+
+      labelIds.push_back(labelIds[i]);
       }
     }
   std::copy(
@@ -302,10 +442,16 @@ void ApplyPeriodicBC(double *pt)
 }
 
 // **************************************************************************
-void ApplyPeriodicBC(vector<double> &points, vector<unsigned short> &numbers)
+void ApplyPeriodicBC(
+    vector<double> &points,
+    vector<unsigned short> &numbers,
+    vector<string> &labels,
+    vector<int> &labelIds)
 {
   vector<double> newPoints;
   vector<unsigned short> newNumbers;
+  vector<string> newLabels;
+  vector<int> newLabelIds;
 
   size_t nPoints = numbers.size();
   for (size_t i=0; i<nPoints; ++i)
@@ -322,19 +468,33 @@ void ApplyPeriodicBC(vector<double> &points, vector<unsigned short> &numbers)
       newPoints.push_back(pt[2]);
 
       newNumbers.push_back(numbers[i]);
+
+      newLabels.push_back(labels[i]);
+
+      newLabelIds.push_back(labelIds[i]);
       }
     }
 
   points.swap(newPoints);
   numbers.swap(newNumbers);
+  labels.swap(newLabels);
+  labelIds.swap(newLabelIds);
 }
 
 // **************************************************************************
 void ApplyTransform(
       vector<double> &points,
       vector<unsigned short> &numbers,
+      vector<string> &labels,
+      vector<int> &labelIds,
+      vector<bool> &sites,
+      vector<bool> &coordinationSites,
       const vector<double> &basisPoints,
       const vector<unsigned short> &basisNumbers,
+      const vector<string> &basisLabels,
+      const vector<int> &basisLabelIds,
+      const vector<bool> &basisSites,
+      const vector<bool> &basisCoordinationSites,
       const vector<double> &transform)
 {
 //#define USE_KDTREE
@@ -348,6 +508,10 @@ void ApplyTransform(
   size_t nOut = nPoints + nBasisPoints;
   points.reserve(3*nOut);
   numbers.reserve(nOut);
+  labels.reserve(nOut);
+  labelIds.reserve(nOut);
+  sites.reserve(nOut);
+  coordinationSites.reserve(nOut);
 
   for (size_t i=0; i<nBasisPoints; ++i)
     {
@@ -361,12 +525,18 @@ void ApplyTransform(
     if (!Exists(pt, points, 1e-5))
 #endif
       {
-      // save position
       points.push_back(pt[0]);
       points.push_back(pt[1]);
       points.push_back(pt[2]);
-      // save type
+
       numbers.push_back(basisNumbers[i]);
+
+      labels.push_back(basisLabels[i]);
+      labelIds.push_back(basisLabelIds[i]);
+
+      sites.push_back(basisSites[i]);
+
+      coordinationSites.push_back(basisCoordinationSites[i]);
       }
     }
 }
@@ -375,8 +545,16 @@ void ApplyTransform(
 void ApplyTransforms(
       vector<double> &points,
       vector<unsigned short> &numbers,
+      vector<string> &labels,
+      vector<int> &labelIds,
+      vector<bool> &sites,
+      vector<bool> &coordinationSites,
       const vector<double> &basisPoints,
       const vector<unsigned short> &basisNumbers,
+      const vector<string> &basisLabels,
+      const vector<int> &basisLabelIds,
+      const vector<bool> &basisSites,
+      const vector<bool> &basisCoordinationSites,
       const vector<vector<double> > &transforms,
       const vector<string> &transformLabels,
       const vector<bool> &activeTransforms)
@@ -387,7 +565,10 @@ void ApplyTransforms(
     if (activeTransforms[i])
       {
       cerr << "transform " << transformLabels[i] << endl;
-      ApplyTransform(points, numbers, basisPoints, basisNumbers, transforms[i]);
+      ApplyTransform(
+          points, numbers, labels, labelIds, sites, coordinationSites,
+          basisPoints, basisNumbers, basisLabels, basisLabelIds,
+          basisSites, basisCoordinationSites, transforms[i]);
       }
     }
 }
@@ -459,11 +640,21 @@ void ComputePrimitiveCellPositions(
 
 // **************************************************************************
 void CopyTranslate(
+      double *offset,
+      bool ghost,
       const vector<double> &basisPoints,
       const vector<unsigned short> &basisNumbers,
-      double *offset,
+      const vector<string> &basisLabels,
+      const vector<int> &basisLabelIds,
+      const vector<bool> &basisSites,
+      const vector<bool> &basisCoordinationSites,
       vector<double> &points,
-      vector<unsigned short> &numbers)
+      vector<unsigned short> &numbers,
+      vector<string> &labels,
+      vector<int> &labelIds,
+      vector<bool> &sites,
+      vector<bool> &coordinationSites,
+      vector<bool> &ghostSites)
 {
   size_t nPts = basisPoints.size()/3;
   for (size_t i = 0; i<nPts; ++i)
@@ -479,6 +670,14 @@ void CopyTranslate(
       points.push_back(pt[2]);
 
       numbers.push_back(basisNumbers[i]);
+
+      labels.push_back(basisLabels[i]);
+      labelIds.push_back(basisLabelIds[i]);
+
+      sites.push_back(basisSites[i]);
+      coordinationSites.push_back(basisCoordinationSites[i]);
+
+      ghostSites.push_back(ghost?ghost:ghostSites[i]);
       }
     }
 }
@@ -487,6 +686,11 @@ void CopyTranslate(
 void ComputeDuplicates(
       vector<double> &points,
       vector<unsigned short> &numbers,
+      vector<string> &labels,
+      vector<int> &labelIds,
+      vector<bool> &sites,
+      vector<bool> &coordinationSites,
+      vector<bool> &ghostSites,
       const vector<double> &primvec,
       unsigned int nAPlus,
       unsigned int nAMinus,
@@ -497,161 +701,148 @@ void ComputeDuplicates(
 {
   vector<double> basisPoints(points);
   vector<unsigned short> basisNumbers(numbers);
+  vector<string> basisLabels(labels);
+  vector<int> basisLabelIds(labelIds);
+  vector<bool> basisSites(sites);
+  vector<bool> basisCoordinationSites(coordinationSites);
 
   const double *a = &primvec[0];
   const double *b = &primvec[3];
   const double *c = &primvec[6];
 
+  double offset[3];
+
   // a hat
   for (unsigned int i=1; i<=nAPlus; ++i)
     {
-    double offset[3];
     Math3D::copy(offset, a);
     Math3D::scale(offset, static_cast<double>(i));
-    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    CopyTranslate(
+        offset, false,
+        basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+        basisCoordinationSites, points, numbers, labels, labelIds, sites,
+        coordinationSites, ghostSites);
     }
 
   // -a hat
   for (unsigned int i=1; i<=nAMinus; ++i)
     {
-    double offset[3];
     Math3D::copy(offset, a);
     Math3D::scale(offset, -static_cast<double>(i));
-    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    CopyTranslate(
+        offset, false,
+        basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+        basisCoordinationSites, points, numbers, labels, labelIds, sites,
+        coordinationSites, ghostSites);
     }
+  // a hat ghosts
+  Math3D::copy(offset, a);
+  Math3D::scale(offset, static_cast<double>(nAPlus+1));
+  CopyTranslate(
+      offset, true,
+      basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+      basisCoordinationSites, points, numbers, labels, labelIds, sites,
+      coordinationSites, ghostSites);
+  Math3D::copy(offset, a);
+  Math3D::scale(offset, -static_cast<double>(nAMinus+1));
+  CopyTranslate(
+      offset, true,
+      basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+      basisCoordinationSites, points, numbers, labels, labelIds, sites,
+      coordinationSites, ghostSites);
 
-  if (nAMinus || nAPlus)
-    {
-    basisPoints.assign(points.begin(), points.end());
-    basisNumbers.assign(numbers.begin(), numbers.end());
-    }
+  basisPoints.assign(points.begin(), points.end());
+  basisNumbers.assign(numbers.begin(), numbers.end());
+  basisLabels.assign(labels.begin(), labels.end());
+  basisLabelIds.assign(labelIds.begin(), labelIds.end());
+  basisSites.assign(sites.begin(), sites.end());
+  basisCoordinationSites.assign(coordinationSites.begin(), coordinationSites.end());
 
   // b hat
   for (unsigned int i=1; i<=nBPlus; ++i)
     {
-    double offset[3];
     Math3D::copy(offset, b);
     Math3D::scale(offset, static_cast<double>(i));
-    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    CopyTranslate(
+        offset, false,
+        basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+        basisCoordinationSites, points, numbers, labels, labelIds, sites,
+        coordinationSites, ghostSites);
     }
 
   // -b hat
   for (unsigned int i=1; i<=nBMinus; ++i)
     {
-    double offset[3];
     Math3D::copy(offset, b);
     Math3D::scale(offset, -static_cast<double>(i));
-    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    CopyTranslate(
+        offset, false,
+        basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+        basisCoordinationSites, points, numbers, labels, labelIds, sites,
+        coordinationSites, ghostSites);
     }
+  // b hat ghosts
+  Math3D::copy(offset, b);
+  Math3D::scale(offset, static_cast<double>(nBPlus+1));
+  CopyTranslate(
+      offset, true,
+      basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+      basisCoordinationSites, points, numbers, labels, labelIds, sites,
+      coordinationSites, ghostSites);
+  Math3D::copy(offset, b);
+  Math3D::scale(offset, -static_cast<double>(nBMinus+1));
+  CopyTranslate(
+      offset, true,
+      basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+      basisCoordinationSites, points, numbers, labels, labelIds, sites,
+      coordinationSites, ghostSites);
 
-  if (nBMinus || nBPlus)
-    {
-    basisPoints.assign(points.begin(), points.end());
-    basisNumbers.assign(numbers.begin(), numbers.end());
-    }
+  basisPoints.assign(points.begin(), points.end());
+  basisNumbers.assign(numbers.begin(), numbers.end());
+  basisLabels.assign(labels.begin(), labels.end());
+  basisLabelIds.assign(labelIds.begin(), labelIds.end());
+  basisSites.assign(sites.begin(), sites.end());
+  basisCoordinationSites.assign(coordinationSites.begin(), coordinationSites.end());
 
   // c hat
   for (unsigned int i=1; i<=nCPlus; ++i)
     {
-    double offset[3];
     Math3D::copy(offset, c);
     Math3D::scale(offset, static_cast<double>(i));
-    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
+    CopyTranslate(
+        offset, false,
+        basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+        basisCoordinationSites, points, numbers, labels, labelIds, sites,
+        coordinationSites, ghostSites);
     }
 
   // -c hat
   for (unsigned int i=1; i<=nCMinus; ++i)
     {
-    double offset[3];
     Math3D::copy(offset, c);
     Math3D::scale(offset, -static_cast<double>(i));
-    CopyTranslate(basisPoints, basisNumbers, offset, points, numbers);
-    }
-}
-
-// **************************************************************************
-int Parse(
-    istream &file,
-    vector<double> &lengths,
-    vector<double> &angles,
-    vector<double> &positions,
-    vector<unsigned short> &numbers,
-    vector<vector<double> > &transforms,
-    vector<string> &transformLabels)
-{
-  string type, ver;
-  file >> type >> ver;
-  if (type != "CIFPP")
-    {
-    pError(cerr) << "read failed, this is not a cifpp file" << endl;
-    return -1;
+    CopyTranslate(
+        offset, false,
+        basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+        basisCoordinationSites, points, numbers, labels, labelIds, sites,
+        coordinationSites, ghostSites);
     }
 
-  lengths.resize(3, 0.0);
-  angles.resize(3, 0.0);
-
-  string label;
-  while (file && file >> label)
-    {
-    cerr << "parsing " << label << endl;
-    if ((label == "_cell_length_a") && !(file >> lengths[0]))
-      {
-      pError(cerr) << "Failed to read " << label << endl;
-      return -1;
-      }
-    else
-    if ((label == "_cell_length_b") && !(file >> lengths[1]))
-      {
-      pError(cerr) << "Failed to read " << label << endl;
-      return -1;
-      }
-    else
-    if ((label == "_cell_length_c") && !(file >> lengths[2]))
-      {
-      pError(cerr) << "Failed to read " << label << endl;
-      return -1;
-      }
-    else
-    if ((label == "_cell_angle_alpha") && !(file >> angles[0]))
-      {
-      pError(cerr) << "Failed to read " << label << endl;
-      return -1;
-      }
-    else
-    if ((label == "_cell_angle_beta") && !(file >> angles[1]))
-      {
-      pError(cerr) << "Failed to read " << label << endl;
-      return -1;
-      }
-    else
-    if ((label == "_cell_angle_gamma") && !(file >> angles[2]))
-      {
-      pError(cerr) << "Failed to read " << label << endl;
-      return -1;
-      }
-    else
-    if ( (label == "_symmetry_transforms")
-      && ParseTransforms(file, transforms, transformLabels) )
-      {
-      pError(cerr) << "Failed to read transforms" << endl;
-      return -1;
-      }
-    else
-    if ( (label == "_atom_site_type_symbol")
-      && ParseTypes(file, numbers) )
-      {
-      pError(cerr) << "Failed to read types" << endl;
-      return -1;
-      }
-    else
-    if ( (label == "_atom_site_fract_xyz")
-      && ParsePositions(file, positions) )
-      {
-      pError(cerr) << "Failed to read positions" << endl;
-      return -1;
-      }
-    }
-  return 0;
+  // c hat ghosts
+  Math3D::copy(offset, c);
+  Math3D::scale(offset, static_cast<double>(nCPlus+1));
+  CopyTranslate(
+      offset, true,
+      basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+      basisCoordinationSites, points, numbers, labels, labelIds, sites,
+      coordinationSites, ghostSites);
+  Math3D::copy(offset, c);
+  Math3D::scale(offset, -static_cast<double>(nCMinus+1));
+  CopyTranslate(
+      offset, true,
+      basisPoints, basisNumbers, basisLabels, basisLabelIds, basisSites,
+      basisCoordinationSites, points, numbers, labels, labelIds, sites,
+      coordinationSites, ghostSites);
 }
 };
 
@@ -666,13 +857,15 @@ vtkCIFMoleculeReader::vtkCIFMoleculeReader() :
       DuplicateCPlus(0),
       DuplicateAMinus(0),
       DuplicateBMinus(0),
-      DuplicateCMinus(0)
+      DuplicateCMinus(0),
+      GenerateCoordinationSites(0),
+      GenerateGhostBonds(0)
 {
   #ifdef vtkCIFMoleculeReaderDEBUG
   cerr << "=====vtkCIFMoleculeReader::vtkCIFMoleculeReader" << endl;
   #endif
   this->SetNumberOfInputPorts(0);
-  this->SetNumberOfOutputPorts(2);
+  this->SetNumberOfOutputPorts(3);
 }
 
 //----------------------------------------------------------------------------
@@ -716,6 +909,7 @@ int vtkCIFMoleculeReader::FillOutputPortInformation(
       info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkMolecule");
       break;
     case 1:
+    case 2:
       info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPolyData");
       break;
     default:
@@ -743,10 +937,7 @@ void vtkCIFMoleculeReader::DeacivateTransforms()
   cerr << "=====vtkCIFMoleculeReader::DeacivateTransforms" << endl;
   #endif
   size_t n = this->Transforms.size();
-  for (size_t i=0; i<n; ++i)
-    {
-    this->DeactivateTransform(i);
-    }
+  this->ActiveTransforms.assign(n, false);
 }
 
 //----------------------------------------------------------------------------
@@ -775,6 +966,79 @@ void vtkCIFMoleculeReader::DeactivateTransform(size_t i)
 }
 
 //----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::ActivateSite(size_t i)
+{
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "=====vtkCIFMoleculeReader::ActivateSite " << i << endl;
+  #endif
+  if (!this->Sites[i])
+    {
+    this->BasisSites[i] = true;
+    this->Modified();
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::DeactivateSite(size_t i)
+{
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "=====vtkCIFMoleculeReader::DeactivateSite " << i << endl;
+  #endif
+  if (this->Sites[i])
+    {
+    this->BasisSites[i] = false;
+    this->Modified();
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::DeacivateSites()
+{
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "=====vtkCIFMoleculeReader::DeacivateSites" << endl;
+  #endif
+  size_t n = this->BasisSites.size();
+  this->BasisSites.assign(n, false);
+}
+
+//----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::ActivateCoordinationSite(size_t i)
+{
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "=====vtkCIFMoleculeReader::ActivateCoordinationSite " << i << endl;
+  #endif
+  if (!this->BasisCoordinationSites[i])
+    {
+    this->BasisCoordinationSites[i] = true;
+    this->Modified();
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::DeactivateCoordinationSite(size_t i)
+{
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "=====vtkCIFMoleculeReader::DeactivateCoordinationSite " << i << endl;
+  #endif
+  if (this->BasisCoordinationSites[i])
+    {
+    this->BasisCoordinationSites[i] = false;
+    this->Modified();
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::DeacivateCoordinationSites()
+{
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "=====vtkCIFMoleculeReader::DeacivateCoordinationSites" << endl;
+  #endif
+
+  size_t n = this->BasisCoordinationSites.size();
+  this->BasisCoordinationSites.assign(n, false);
+}
+
+//----------------------------------------------------------------------------
 void vtkCIFMoleculeReader::SetFileName(const char *cFileName)
 {
   #ifdef vtkCIFMoleculeReaderDEBUG
@@ -794,6 +1058,8 @@ void vtkCIFMoleculeReader::SetFileName(const char *cFileName)
   this->CellAngles.resize(3, 0.0);
   this->BasisPositions.clear();
   this->BasisTypes.clear();
+  this->BasisLabels.clear();
+  this->BasisLabelIds.clear();
   this->Transforms.clear();
   this->TransformLabels.clear();
   this->DuplicateAPlus = 0;
@@ -816,13 +1082,34 @@ void vtkCIFMoleculeReader::SetFileName(const char *cFileName)
         this->CellAngles,
         this->BasisPositions,
         this->BasisTypes,
+        this->BasisLabels,
         this->Transforms,
         this->TransformLabels))
     {
     vtkErrorMacro("failed to parse " <<this->FileName);
     }
 
-  ::Print(cerr, this->BasisPositions, this->BasisTypes);
+  size_t basisSize = this->BasisTypes.size();
+
+  this->BasisLabelIds.resize(basisSize);
+  for (size_t i=0; i<basisSize; ++i)
+    {
+    this->BasisLabelIds[i] = i;
+    }
+
+  this->BasisSites.clear();
+  this->BasisSites.resize(basisSize, true);
+
+  this->BasisCoordinationSites.clear();
+  this->BasisCoordinationSites.resize(basisSize, false);
+
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "basis positons" << endl;
+  ::Print(cerr,
+      this->BasisPositions, this->BasisTypes, this->BasisLabels,
+      this->BasisSites, this->BasisCoordinationSites);
+  cerr << endl;
+  #endif
 
   this->ActiveTransforms.clear();
   this->ActiveTransforms.resize(this->Transforms.size(), true);
@@ -844,101 +1131,107 @@ int vtkCIFMoleculeReader::RequestData(
   #ifdef vtkCIFMoleculeReaderDEBUG
   cerr << "=====vtkCIFMoleculeReader::RequestData" << endl;
   #endif
-  int port = request->Get(vtkExecutive::FROM_OUTPUT_PORT());
-//  if (port == 0)
+  //int port = request->Get(vtkExecutive::FROM_OUTPUT_PORT());
+
+  vtkMolecule *molecule
+    = vtkMolecule::SafeDownCast(vtkDataObject::GetData(outInfo, 0));
+  if (!molecule)
     {
-    vtkMolecule *molecule
-      = vtkMolecule::SafeDownCast(vtkDataObject::GetData(outInfo, 0));
-
-    if (!molecule)
-      {
-      vtkErrorMacro("Empty molecule output");
-      return 1;
-      }
-
-    this->Positions.clear();
-    this->Types.clear();
-    ApplyTransforms(
-          this->Positions,
-          this->Types,
-          this->BasisPositions,
-          this->BasisTypes,
-          this->Transforms,
-          this->TransformLabels,
-          this->ActiveTransforms);
-
-    //ApplyPeriodicBC(this->Positions, this->Types);
-
-    // TODO -- works for this particualr case but not sure
-    // how is this encoded in the file
-    //double n[3] = {0.0, 1.0, 0.0};
-    //double p[3] = {0.0, 0.5, 0.0};
-    //Mirror(this->Positions, this->Types, n, p);
-    // Duplicating across the periodic boundary solves it!
-
-    DuplicatePeriodicPositions(this->Positions, this->Types, 0, 1.0e-3);
-    DuplicatePeriodicPositions(this->Positions, this->Types, 1, 1.0e-3);
-    DuplicatePeriodicPositions(this->Positions, this->Types, 2, 1.0e-3);
-
-    cerr << "transformed positions" << endl;
-    ::Print(cerr, this->Positions, this->Types);
-    cerr << endl;
-
-    ComputePrimitiveCellPositions(
-          this->Positions,
-          this->CellAxes);
-
-    cerr << "primative cell positions" << endl;
-    ::Print(cerr, this->Positions, this->Types);
-    cerr << endl;
-
-    ComputeDuplicates(
-        this->Positions,
-        this->Types,
-        this->CellAxes,
-        this->DuplicateAPlus,
-        this->DuplicateAMinus,
-        this->DuplicateBPlus,
-        this->DuplicateBMinus,
-        this->DuplicateCPlus,
-        this->DuplicateCMinus);
-
-    BuildMolecule(
-        molecule,
-        this->Positions,
-        this->Types,
-        this->Detector.get());
-
-    #if 0 && defined(vtkCIFMoleculeReaderDEBUG)
-    cerr << "port 0" << endl;
-    molecule->Print(cerr);
-    cerr << endl;
-    #endif
+    vtkErrorMacro("Empty molecule output");
+    return 1;
     }
-//  else
-//  if (port == 1)
+
+  vtkPolyData *polyhedra
+    = vtkPolyData::SafeDownCast(vtkDataObject::GetData(outInfo, 1));
+  if (!polyhedra)
     {
-    vtkPolyData *axes
-      = vtkPolyData::SafeDownCast(vtkDataObject::GetData(outInfo, 1));
-
-    if (!axes)
-      {
-      vtkErrorMacro("Empty axes output");
-      return 1;
-      }
-
-    BuildAxes(axes, this->CellAxes);
-
-    #if 0 && defined(vtkCIFMoleculeReaderDEBUG)
-    cerr << "port 1" << endl;
-    axes->Print(cerr);
-    cerr << endl;
-    #endif
+    vtkErrorMacro("Empty plyhedra output");
+    return 1;
     }
-//  else
-//    {
-//    vtkErrorMacro("invalid port " << port);
-//    }
+
+  vtkPolyData *axes
+    = vtkPolyData::SafeDownCast(vtkDataObject::GetData(outInfo, 2));
+  if (!axes)
+    {
+    vtkErrorMacro("Empty axes output");
+    return 1;
+    }
+
+  this->Positions.clear();
+  this->Types.clear();
+  this->Labels.clear();
+  this->LabelIds.clear();
+  this->Sites.clear();
+  this->CoordinationSites.clear();
+  ApplyTransforms(
+      this->Positions, this->Types, this->Labels, this->LabelIds,
+      this->Sites, this->CoordinationSites, this->BasisPositions,
+      this->BasisTypes, this->BasisLabels, this->BasisLabelIds,
+      this->BasisSites, this->BasisCoordinationSites, this->Transforms,
+      this->TransformLabels, this->ActiveTransforms);
+
+  DuplicatePeriodicPositions(
+      this->Positions, this->Types, this->Labels, this->LabelIds,
+      this->Sites, this->CoordinationSites,
+      0, 1.0e-3);
+
+  DuplicatePeriodicPositions(
+      this->Positions, this->Types, this->Labels, this->LabelIds,
+      this->Sites, this->CoordinationSites,
+      1, 1.0e-3);
+
+  DuplicatePeriodicPositions(
+      this->Positions, this->Types, this->Labels, this->LabelIds,
+      this->Sites, this->CoordinationSites,
+      2, 1.0e-3);
+
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "transformed positions" << endl;
+  ::Print(cerr,
+      this->Positions, this->Types, this->Labels,
+      this->Sites, this->CoordinationSites);
+  cerr << endl;
+  #endif
+
+  ComputePrimitiveCellPositions(
+      this->Positions,
+      this->CellAxes);
+
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "primative cell positions" << endl;
+  ::Print(cerr,
+      this->Positions, this->Types, this->Labels,
+      this->Sites, this->CoordinationSites);
+  cerr << endl;
+  #endif
+
+  vector<bool> ghosts(this->Types.size(), false);
+  ComputeDuplicates(
+      this->Positions, this->Types, this->Labels,
+      this->LabelIds, this->Sites, this->CoordinationSites,
+      ghosts, this->CellAxes,
+      this->DuplicateAPlus, this->DuplicateAMinus,
+      this->DuplicateBPlus, this->DuplicateBMinus,
+      this->DuplicateCPlus, this->DuplicateCMinus);
+
+  vtkMolecule *completeMolecule = vtkMolecule::New();
+  BuildMolecule(
+      completeMolecule,
+      this->Positions, this->Types, this->Labels,
+      this->LabelIds, this->Sites, this->CoordinationSites,
+      ghosts, this->Detector.get());
+
+
+  if (this->GenerateCoordinationSites)
+    {
+    BuildPolyhedra(completeMolecule, polyhedra);
+    }
+
+  CopyActiveSites(completeMolecule, this->GenerateGhostBonds, molecule);
+
+  completeMolecule->Delete();
+
+  BuildAxes(axes, this->CellAxes);
 
   return 1;
 }
