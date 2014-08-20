@@ -110,6 +110,13 @@
    </item>
   </layout>
  </widget>
+ <tabstops>
+  <tabstop>Ambient</tabstop>
+  <tabstop>Diffuse</tabstop>
+  <tabstop>Specular</tabstop>
+  <tabstop>SpecularPower</tabstop>
+  <tabstop>Opacity</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

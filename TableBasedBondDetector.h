@@ -9,6 +9,7 @@
 class TableBasedBondDetector : public BondDetector
 {
 public:
+  TableBasedBondDetector() : MaxBondLength(0) {}
   virtual ~TableBasedBondDetector() {}
 
   /**
@@ -34,7 +35,7 @@ public:
   /**
   Remove the entries in the table.
   */
-  void ClearTable(){ this->Table.clear(); }
+  void ClearTable();
 
   /**
   Access cells in the table by row,
@@ -46,6 +47,7 @@ public:
   double GetMaxLength(int row) const;
 
 private:
+  double MaxBondLength;
   typedef std::map<unsigned int,std::pair<double,double > > TableType;
   TableType Table;
 };

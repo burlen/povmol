@@ -19,8 +19,12 @@
 #include <vtkVertexListIterator.h>
 #include <vtkGraphEdge.h>
 #include <vtkPointData.h>
+#include <vtkPolyDataNormals.h>
 
+//#define GeometryDEBUG
+#ifdef GeometryDEBUG
 #include <vtkPolyDataWriter.h>
+#endif
 
 #include <vector>
 #include <string>
@@ -349,15 +353,27 @@ void BuildPolyhedra(vtkMolecule *molecule, vtkPolyData *polyhedra)
       }
     }
 
+  vtkPolyData *pd = vtkPolyData::New();
+  pd->SetPolys(generator->GetTriangles());
+  pd->SetPoints(generator->GetPoints());
+  pd->GetPointData()->SetScalars(generator->GetLabels());
+
+  vtkPolyDataNormals *pdn = vtkPolyDataNormals::New();
+  pdn->SetInputData(pd);
+  pdn->AutoOrientNormalsOn();
+  pdn->ConsistencyOn();
+  pd->Delete();
+  pdn->Update();
+
   // build the output
   polyhedra->Initialize();
-  polyhedra->SetPolys(generator->GetTriangles());
-  polyhedra->SetPoints(generator->GetPoints());
-  polyhedra->GetPointData()->SetScalars(generator->GetLabels());
+  polyhedra->ShallowCopy(pdn->GetOutput());
 
-  polyhedra->Print(cerr);
+  pdn->Delete();
 
   #ifdef GeometryDEBUG
+  polyhedra->Print(cerr);
+
   vtkPolyDataWriter *w = vtkPolyDataWriter::New();
   w->SetInputData(polyhedra);
   w->SetFileName("polyhedra.vtk");

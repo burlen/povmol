@@ -131,6 +131,12 @@
    </item>
   </layout>
  </widget>
+ <tabstops>
+  <tabstop>AddRow</tabstop>
+  <tabstop>BondTableView</tabstop>
+  <tabstop>buttonBox</tabstop>
+  <tabstop>RemoveRow</tabstop>
+ </tabstops>
  <resources/>
  <connections>
   <connection>

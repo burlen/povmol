@@ -42,6 +42,7 @@ private slots:
   void UpdateCoordinationSiteColors(vtkLookupTable *lut);
   //void UpdateCoordinationSiteAlpha();
   void UpdateDuplicates();
+  void UpdateBondColor();
   void UpdateGhostBonds(bool v);
   void OpenFile();
   void WritePOV();

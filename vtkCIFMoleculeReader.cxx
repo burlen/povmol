@@ -559,12 +559,17 @@ void ApplyTransforms(
       const vector<string> &transformLabels,
       const vector<bool> &activeTransforms)
 {
+  #ifndef vtkCIFMoleculeReaderDEBUG
+  (void)transformLabels;
+  #endif
   size_t nTransforms = transforms.size();
   for (size_t i = 0; i<nTransforms; ++i)
     {
     if (activeTransforms[i])
       {
+      #ifdef vtkCIFMoleculeReaderDEBUG
       cerr << "transform " << transformLabels[i] << endl;
+      #endif
       ApplyTransform(
           points, numbers, labels, labelIds, sites, coordinationSites,
           basisPoints, basisNumbers, basisLabels, basisLabelIds,
@@ -572,7 +577,6 @@ void ApplyTransforms(
       }
     }
 }
-
 
 // **************************************************************************
 void ComputePrimitiveCell(
@@ -606,9 +610,11 @@ void ComputePrimitiveCell(
   Math3D::rotatei(c, alpha);
   Math3D::rotate(c, b, M_PI/2.0 - beta);
 
+  #ifdef vtkCIFMoleculeReaderDEBUG
   cerr << "a = [" << a[0] << ", " << a[1] << ", " << a[2] << "]" << endl;
   cerr << "b = [" << b[0] << ", " << b[1] << ", " << b[2] << "]" << endl;
   cerr << "c = [" << c[0] << ", " << c[1] << ", " << c[2] << "]" << endl;
+  #endif
 }
 
 // **************************************************************************
@@ -877,6 +883,14 @@ vtkCIFMoleculeReader::~vtkCIFMoleculeReader()
   this->Detector = nullptr;
 }
 
+//----------------------------------------------------------------------------
+void vtkCIFMoleculeReader::Modified()
+{
+  #ifdef vtkCIFMoleculeReaderDEBUG
+  cerr << "=====vtkCIFMoleculeReader::Modified" << endl;
+  #endif
+  vtkObject::Modified();
+}
 
 //----------------------------------------------------------------------------
 void vtkCIFMoleculeReader::SetBondDetector(const shared_ptr<BondDetector> &detector)

@@ -57,20 +57,28 @@ bool TableBasedBondDetector::Connected(
     unsigned short a2,
     double *pos2) const
 {
+  double tmp[3];
+  double d = Math3D::length(Math3D::sub(tmp, pos2, pos1));
+
+  // skip expensive table lookup if these atoms are
+  // further away than the largest bond distance in the
+  // table.
+  if (d > this->MaxBondLength)
+    {
+    return false;
+    }
+
   unsigned long key = makeKey(a1, a2);
+
+  // check that this combination is in the table
+  // if not assume that there's no desire to generate
+  // bonds between these two types of atoms
   if (!this->Table.count(key))
     {
-    /* not an error.
-    pError(cerr)
-      << "No entry for " << AtomicProperties::Symbol(a1)
-      << " -> " << AtomicProperties::Symbol(a2) << endl; */
     return false;
     }
 
   const pair<double, double> &range = this->Table.at(key);
-
-  double tmp[3];
-  double d = Math3D::length(Math3D::sub(tmp, pos2, pos1));
 
   return ( (d >= range.first) && (d <= range.second));
 }
@@ -82,6 +90,11 @@ void TableBasedBondDetector::InsertTableEntry(
     double minLength,
     double maxLength)
 {
+  if (this->MaxBondLength < maxLength)
+    {
+    this->MaxBondLength = maxLength;
+    }
+
   pair<double,double> range(minLength, maxLength);
   this->Table[makeKey(source, destination)] = range;
   this->Table[makeKey(destination, source)] = range;
@@ -128,4 +141,10 @@ double TableBasedBondDetector::GetMaxLength(int row) const
   auto it = this->Table.begin();
   for (int i=0; i<row; ++i) ++it;
   return it->second.second;
+}
+// ---------------------------------------------------------------------------
+void TableBasedBondDetector::ClearTable()
+{
+  this->MaxBondLength = 0.0;
+  this->Table.clear();
 }

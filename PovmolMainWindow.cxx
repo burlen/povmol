@@ -92,8 +92,16 @@ PovmolMainWindow::PovmolMainWindow()
   #endif
   this->Ui = new Ui_PovmolMainWindowUi;
   this->Ui->setupUi(this);
+
   this->Ui->BondRadius->setValidator(new QDoubleValidator(this->Ui->BondRadius));
   this->Ui->AtomRadiusFactor->setValidator(new QDoubleValidator(this->Ui->AtomRadiusFactor));
+
+  this->Ui->DuplicateAMinus->setValidator(new QIntValidator(this->Ui->DuplicateAMinus));
+  this->Ui->DuplicateAPlus->setValidator(new QIntValidator(this->Ui->DuplicateAPlus));
+  this->Ui->DuplicateBMinus->setValidator(new QIntValidator(this->Ui->DuplicateBMinus));
+  this->Ui->DuplicateBPlus->setValidator(new QIntValidator(this->Ui->DuplicateBPlus));
+  this->Ui->DuplicateCMinus->setValidator(new QIntValidator(this->Ui->DuplicateCMinus));
+  this->Ui->DuplicateCPlus->setValidator(new QIntValidator(this->Ui->DuplicateCPlus));
 
   this->Renderer = vtkRenderer::New();
   this->Ui->ViewWidget->GetRenderWindow()->AddRenderer(this->Renderer);
@@ -127,18 +135,19 @@ PovmolMainWindow::PovmolMainWindow()
   connect(this->Ui->BondProximityFactor, SIGNAL(editingFinished()), this, SLOT(UpdateBondProximityFactor()));
   connect(this->Ui->BondColorAtoms, SIGNAL(toggled(bool)), this, SLOT(UpdateBondColorMode()));
   connect(this->Ui->BondColorSingle, SIGNAL(toggled(bool)), this, SLOT(UpdateBondColorMode()));
+  connect(this->Ui->BondColor, SIGNAL(released()), this, SLOT(UpdateBondColor()));
   connect(this->Ui->LightIntensity, SIGNAL(valueChanged(int)), this, SLOT(UpdateLightIntensity()));
   connect(this->Ui->ActiveTransforms, SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(UpdateActiveTransforms()));
   connect(this->Ui->ActiveSites, SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(UpdateSites()));
   connect(this->Ui->CoordinationSites, SIGNAL(toggled(bool)), this, SLOT(EnableCoordinationSites(bool)));
   connect(this->Ui->ActiveCoordinationSites, SIGNAL(itemChanged(QListWidgetItem*)), this, SLOT(UpdateCoordinationSites()));
   connect(this->Ui->ActiveCoordinationSites, SIGNAL(itemDoubleClicked(QListWidgetItem*)), this, SLOT(UpdateCoordinationSiteColor(QListWidgetItem*)));
-  connect(this->Ui->DuplicateAMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
-  connect(this->Ui->DuplicateBMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
-  connect(this->Ui->DuplicateCMinus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
-  connect(this->Ui->DuplicateAPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
-  connect(this->Ui->DuplicateBPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
-  connect(this->Ui->DuplicateCPlus, SIGNAL(valueChanged(int)), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateAMinus, SIGNAL(editingFinished()), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateBMinus, SIGNAL(editingFinished()), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateCMinus, SIGNAL(editingFinished()), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateAPlus, SIGNAL(editingFinished()), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateBPlus, SIGNAL(editingFinished()), this, SLOT(UpdateDuplicates()));
+  connect(this->Ui->DuplicateCPlus, SIGNAL(editingFinished()), this, SLOT(UpdateDuplicates()));
   connect(this->Ui->GhostBonds, SIGNAL(toggled(bool)), this, SLOT(UpdateGhostBonds(bool)));
   connect(this->Ui->ViewDownX, SIGNAL(released()), this, SLOT(ViewDownX()));
   connect(this->Ui->ViewDownY, SIGNAL(released()), this, SLOT(ViewDownY()));
@@ -449,6 +458,10 @@ void PovmolMainWindow::BuildPipeline()
   this->MoleculeMapper->SetBondRadius(this->Ui->BondRadius->text().toDouble());
   this->MoleculeMapper->SetPOVRayStreaming(true);
 
+  unsigned char color[3];
+  this->MoleculeMapper->GetBondColor(color);
+  this->Ui->BondColor->setIcon(makeColorSwatch(QColor(color[0], color[1], color[2])));
+
   vtkActor *molActor = vtkActor::New();
 
   molActor->GetProperty()->SetAmbient(0.3);
@@ -500,33 +513,48 @@ void PovmolMainWindow::WriteVTK()
   cerr << ":::::PovmolMainWindow::WriteVTK" << endl;
   #endif
   string fileName = QFileDialog::getSaveFileName(
-    this, tr("Write Geometry"), "", tr("VTK Legacy (*.vtk)")).toStdString();
+    this, tr("Bond Geometry"), "", tr("VTK Legacy (*.vtk)")).toStdString();
 
-  if (fileName.c_str())
+  if (fileName != "")
     {
     vtkMoleculeToBondStickFilter *bf = vtkMoleculeToBondStickFilter::New();
     bf->SetInputData(this->MoleculeMapper->GetInput());
 
-    //vtkPolyData *bonds = this->MoleculeMapper->GetBonds();
     vtkPolyDataWriter *w = vtkPolyDataWriter::New();
-    //w->SetInputData(bonds);
     w->SetInputConnection(bf->GetOutputPort());
-    w->SetFileName("bonds.vtk");
+    w->SetFileName(fileName.c_str());
+    w->SetFileTypeToBinary();
     w->Write();
     w->Delete();
-    //bonds->Delete();
     bf->Delete();
-    cerr << "wrote bonds to bonds.vtk" << endl;
+    }
 
+  fileName = QFileDialog::getSaveFileName(
+    this, tr("Atom Geometry"), "", tr("VTK Legacy (*.vtk)")).toStdString();
+
+  if (fileName != "")
+    {
     vtkPolyData *atoms = this->MoleculeMapper->GetAtoms();
-    w = vtkPolyDataWriter::New();
+    vtkPolyDataWriter *w = vtkPolyDataWriter::New();
     w->SetInputData(atoms);
     w->SetFileTypeToBinary();
-    w->SetFileName("atoms.vtk");
+    w->SetFileName(fileName.c_str());
     w->Write();
     w->Delete();
     atoms->Delete();
-    cerr << "wrote atoms to atoms.vtk" << endl;
+    }
+
+  fileName = QFileDialog::getSaveFileName(
+    this, tr("Coordination Polyhedra Geometry"), "", tr("VTK Legacy (*.vtk)")).toStdString();
+
+  if (fileName != "")
+    {
+    vtkPolyDataWriter *w = vtkPolyDataWriter::New();
+    w->SetInputConnection(this->Reader->GetOutputPort(1));
+    w->SetFileTypeToBinary();
+    w->SetFileName(fileName.c_str());
+    w->Write();
+    w->Delete();
     }
 }
 
@@ -664,6 +692,23 @@ void PovmolMainWindow::UpdateBondColorMode()
     }
   this->Render();
 }
+
+// --------------------------------------------------------------------------
+void PovmolMainWindow::UpdateBondColor()
+{
+  unsigned char color[3];
+  this->MoleculeMapper->GetBondColor(color);
+  QColor currentColor(color[0], color[1], color[2]);
+  QColor newColor = QColorDialog::getColor(currentColor, this);
+  if (newColor.isValid())
+    {
+    this->Ui->BondColor->setIcon(makeColorSwatch(newColor));
+    this->MoleculeMapper->SetBondColor(newColor.red(), newColor.green(), newColor.blue());
+    this->Render();
+    }
+}
+
+
 
 // --------------------------------------------------------------------------
 void PovmolMainWindow::UpdateLightIntensity()
@@ -862,12 +907,12 @@ void PovmolMainWindow::UpdateDuplicates()
 
   if (this->Reader)
     {
-    this->Reader->SetDuplicateAMinus(this->Ui->DuplicateAMinus->value());
-    this->Reader->SetDuplicateBMinus(this->Ui->DuplicateBMinus->value());
-    this->Reader->SetDuplicateCMinus(this->Ui->DuplicateCMinus->value());
-    this->Reader->SetDuplicateAPlus(this->Ui->DuplicateAPlus->value());
-    this->Reader->SetDuplicateBPlus(this->Ui->DuplicateBPlus->value());
-    this->Reader->SetDuplicateCPlus(this->Ui->DuplicateCPlus->value());
+    this->Reader->SetDuplicateAMinus(this->Ui->DuplicateAMinus->text().toInt());
+    this->Reader->SetDuplicateBMinus(this->Ui->DuplicateBMinus->text().toInt());
+    this->Reader->SetDuplicateCMinus(this->Ui->DuplicateCMinus->text().toInt());
+    this->Reader->SetDuplicateAPlus(this->Ui->DuplicateAPlus->text().toInt());
+    this->Reader->SetDuplicateBPlus(this->Ui->DuplicateBPlus->text().toInt());
+    this->Reader->SetDuplicateCPlus(this->Ui->DuplicateCPlus->text().toInt());
     this->Render();
     }
 }

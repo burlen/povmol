@@ -133,6 +133,8 @@ protected:
   int RequestData(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
   int FillOutputPortInformation(int, vtkInformation*);
 
+  virtual void Modified();
+
 private:
   std::string FileName;
   bool Initialized;
