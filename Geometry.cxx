@@ -21,6 +21,16 @@
 #include <vtkPointData.h>
 #include <vtkPolyDataNormals.h>
 
+// TODO -- LOOP filter crashes, potential bug in VTK
+#define LINEAR_SUBDIV
+#if defined(BUTTERFLY_SUBDIV)
+#include <vtkButterflySubdivisionFilter.h>
+#elif defined(LOOP_SUBDIV)
+#include <vtkLoopSubdivisionFilter.h>
+#elif defined(LINEAR_SUBDIV)
+#include <vtkLinearSubdivisionFilter.h>
+#endif
+
 //#define GeometryDEBUG
 #ifdef GeometryDEBUG
 #include <vtkPolyDataWriter.h>
@@ -353,33 +363,47 @@ void BuildPolyhedra(vtkMolecule *molecule, vtkPolyData *polyhedra)
       }
     }
 
-  vtkPolyData *pd = vtkPolyData::New();
-  pd->SetPolys(generator->GetTriangles());
-  pd->SetPoints(generator->GetPoints());
-  pd->GetPointData()->SetScalars(generator->GetLabels());
-
-  vtkPolyDataNormals *pdn = vtkPolyDataNormals::New();
-  pdn->SetInputData(pd);
-  pdn->AutoOrientNormalsOn();
-  pdn->ConsistencyOn();
-  pd->Delete();
-  pdn->Update();
-
-  // build the output
   polyhedra->Initialize();
-  polyhedra->ShallowCopy(pdn->GetOutput());
+  if (generator->GetNumberOfTriangles())
+    {
+    vtkPolyData *pd = vtkPolyData::New();
+    pd->SetPolys(generator->GetTriangles());
+    pd->SetPoints(generator->GetPoints());
+    pd->GetPointData()->SetScalars(generator->GetLabels());
 
-  pdn->Delete();
+    #if defined(BUTTERFLY_SUBDIV)
+    vtkButterflySubdivisionFilter *sf = vtkButterflySubdivisionFilter::New();
+    #elif defined(LOOP_SUBDIV)
+    vtkLoopSubdivisionFilter *sf = vtkLoopSubdivisionFilter::New();
+    #elif defined(LINEAR_SUBDIV)
+    vtkLinearSubdivisionFilter *sf = vtkLinearSubdivisionFilter::New();
+    #endif
+    sf->SetNumberOfSubdivisions(2);
+    sf->SetInputData(pd);
 
-  #ifdef GeometryDEBUG
-  polyhedra->Print(cerr);
+    vtkPolyDataNormals *pdn = vtkPolyDataNormals::New();
+    pdn->SetInputConnection(0, sf->GetOutputPort());
+    pdn->AutoOrientNormalsOn();
+    pdn->ConsistencyOn();
+    pdn->Update();
 
-  vtkPolyDataWriter *w = vtkPolyDataWriter::New();
-  w->SetInputData(polyhedra);
-  w->SetFileName("polyhedra.vtk");
-  w->Write();
-  w->Delete();
-  #endif
+    // build the output
+    polyhedra->ShallowCopy(pdn->GetOutput());
+
+    pd->Delete();
+    sf->Delete();
+    pdn->Delete();
+
+    #ifdef GeometryDEBUG
+    polyhedra->Print(cerr);
+
+    vtkPolyDataWriter *w = vtkPolyDataWriter::New();
+    w->SetInputData(polyhedra);
+    w->SetFileName("polyhedra.vtk");
+    w->Write();
+    w->Delete();
+    #endif
+    }
 
   delete generator;
 }

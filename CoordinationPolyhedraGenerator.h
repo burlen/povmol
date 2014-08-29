@@ -48,6 +48,11 @@ public:
   vtkIntArray *GetLabels(){ return this->Labels; }
 
   /**
+  Return the number of triangles computed
+  */
+  vtkIdType GetNumberOfTriangles();
+
+  /**
   Skip generation when given fewer than this number
   of input points.
   */

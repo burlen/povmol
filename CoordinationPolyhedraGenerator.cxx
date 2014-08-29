@@ -225,3 +225,9 @@ int CoordinationPolyhedraGenerator::Insert(
 
   return 1;
 }
+
+// --------------------------------------------------------------------------
+vtkIdType CoordinationPolyhedraGenerator::GetNumberOfTriangles()
+{
+  return this->Triangles->GetNumberOfCells();
+}
