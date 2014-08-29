@@ -463,21 +463,16 @@ void PovmolMainWindow::BuildPipeline()
   this->Ui->BondColor->setIcon(makeColorSwatch(QColor(color[0], color[1], color[2])));
 
   vtkActor *molActor = vtkActor::New();
-
-  molActor->GetProperty()->SetAmbient(0.3);
-  molActor->GetProperty()->SetSpecular(0.5);
-  molActor->GetProperty()->SetDiffuse(0.2);
-  this->Ui->SiteProperties->SetProperty(molActor->GetProperty());
-
   molActor->SetMapper(this->MoleculeMapper);
 
   this->Renderer->AddActor(molActor);
+  molActor->Delete();
+
+  this->Ui->SiteProperties->SetProperty(molActor->GetProperty());
 
   // coordination polyhedra
   vtkPolyDataMapper *polyhedraMapper = vtkPolyDataMapper::New();
   polyhedraMapper->SetInputConnection(this->Reader->GetOutputPort(1));
-  //polyhedraMapper->SetScalarModeToUseCellData();
-  //polyhedraMapper->ScalarVisibilityOn();
 
   this->CoordinationSiteActor = vtkActor::New();
   this->Ui->CoordinationSiteProperties->SetProperty(this->CoordinationSiteActor->GetProperty());
