@@ -452,7 +452,7 @@ void vtkMoleculeMapper2::WriteColorDefs(ostream &os)
     double mappedColor[3];
     lut->GetColor(static_cast<double>(atomicNum), mappedColor);
     ostringstream oss;
-    oss << "AtomColor" << atomicNum;
+    oss << "Atom" << atomicNum << "Color";
     POVRayColor atomColor(oss.str(), mappedColor[0], mappedColor[1], mappedColor[2]);
     pair<int,POVRayColor> val(atomicNum,atomColor);
     pair<map<int,POVRayColor>::iterator,bool> insval = this->AtomColors.insert(val);
@@ -606,12 +606,15 @@ void vtkMoleculeMapper2::WriteAtoms(ostream &os)
         break;
       }
 
+    ostringstream oss;
+    oss << "Atom" << atomicNum;
+
     // TODO -- template on pt type
     double pt[3];
     atomCenters->GetPoint(i, pt);
     vtkVector3f pos(pt[0], pt[1], pt[2]);
 
-    POVRaySphere atom(pos, radius, this->AtomColors[atomicNum], this->AtomFinish);
+    POVRaySphere atom(oss.str(), pos, radius, this->AtomColors[atomicNum], this->AtomFinish);
     os << atom << endl;
     }
 }

@@ -58,7 +58,7 @@ ostream &operator<<(ostream &os, POVRaySphere &s)
 {
   os
     << "sphere { "
-    << s.Center << ", SphereScaling*" << s.Radius << endl
+    << s.Center << ", " << s.Name << "Scaling*" << s.Radius << endl
     << "pigment { " << s.Color.Name << "}" << endl
     << "finish { " << s.Finish.Name << "}" << endl
     << "}";

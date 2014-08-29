@@ -194,17 +194,20 @@ class POVRaySphere
 {
 public:
   POVRaySphere(
+      const string &name,
       vtkVector3f &center,
       float radius,
       POVRayColor &color,
       POVRayFinish &finish)
           :
+      Name(name),
       Center(center),
       Radius(radius),
       Color(color),
       Finish(finish)
       {}
 
+  string Name;
   POVRayPoint Center;
   float Radius;
   POVRayColor Color;
